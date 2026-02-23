@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: DIA IP Guardian (Mini)
+ * Plugin Name: IP Guardian (Mini)
  * Description: Logs visitor IPs and shows top IPs (24h / 7d) with easy block/unblock.
  * Version: 1.0.0
  * Author: Diana
@@ -8,7 +8,113 @@
 
 if (!defined('ABSPATH'))
   exit;
+if (is_admin()) {
+  require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
 
+  class DIA_IPG_Top_IPs_Table extends WP_List_Table
+  {
+    private array $rows = [];
+    private array $blocked = [];
+    private string $base_page = 'dia-ip-guardian';
+
+    public function __construct(array $rows, array $blocked, string $title = '')
+    {
+      parent::__construct([
+        'singular' => 'ip',
+        'plural' => 'ips',
+        'ajax' => false,
+      ]);
+      $this->rows = $rows;
+      $this->blocked = $blocked;
+      $this->_args['plural'] = $title ?: $this->_args['plural'];
+    }
+
+    public function get_columns(): array
+    {
+      return [
+        'ip' => 'IP',
+        'hits' => 'Hits',
+        'last_seen' => 'Last seen',
+        'action' => 'Action',
+      ];
+    }
+
+    public function get_sortable_columns(): array
+    {
+      // key => [orderby, initially_desc?]
+      return [
+        'hits' => ['hits', true],
+        'last_seen' => ['last_seen', true],
+      ];
+    }
+
+    public function prepare_items(): void
+    {
+      $columns = $this->get_columns();
+      $hidden = [];
+      $sortable = $this->get_sortable_columns();
+      $this->_column_headers = [$columns, $hidden, $sortable];
+
+      $orderby = isset($_GET['orderby']) ? sanitize_text_field((string) $_GET['orderby']) : 'hits';
+      $order = isset($_GET['order']) ? strtoupper(sanitize_text_field((string) $_GET['order'])) : 'DESC';
+      if (!in_array($orderby, ['hits', 'last_seen'], true))
+        $orderby = 'hits';
+      if (!in_array($order, ['ASC', 'DESC'], true))
+        $order = 'DESC';
+
+      usort($this->rows, function ($a, $b) use ($orderby, $order) {
+        $va = $a[$orderby] ?? '';
+        $vb = $b[$orderby] ?? '';
+        // hits numeric, last_seen string datetime (sortable lexicographically as Y-m-d H:i:s)
+        if ($orderby === 'hits') {
+          $va = (int) $va;
+          $vb = (int) $vb;
+        } else {
+          $va = (string) $va;
+          $vb = (string) $vb;
+        }
+
+        if ($va === $vb)
+          return 0;
+        $cmp = ($va < $vb) ? -1 : 1;
+        return ($order === 'ASC') ? $cmp : -$cmp;
+      });
+
+      $this->items = $this->rows;
+    }
+
+    public function column_default($item, $column_name)
+    {
+      return esc_html((string) ($item[$column_name] ?? ''));
+    }
+
+    public function column_ip($item)
+    {
+      return '<code>' . esc_html((string) $item['ip']) . '</code>';
+    }
+
+    public function column_action($item)
+    {
+      $ip = (string) ($item['ip'] ?? '');
+      if (!filter_var($ip, FILTER_VALIDATE_IP))
+        return '';
+
+      $blocked = in_array($ip, $this->blocked, true);
+
+      $url = admin_url('admin-post.php?' . http_build_query([
+        'action' => 'dia_ipg_action',
+        'do' => $blocked ? 'unblock' : 'block',
+        'ip' => $ip,
+        '_wpnonce' => wp_create_nonce('dia_ipg_nonce'),
+      ]));
+
+      $label = $blocked ? 'Unblock' : 'Block';
+      $class = $blocked ? 'button' : 'button button-primary';
+
+      return '<a class="' . esc_attr($class) . '" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
+    }
+  }
+}
 class DIA_IP_Guardian
 {
   const TABLE_LOGS = 'dia_ipg_logs';
@@ -236,7 +342,7 @@ class DIA_IP_Guardian
   public static function admin_menu()
   {
     add_menu_page(
-      'DIA IP Guardian',
+      'IP Guardian',
       'IP Guardian',
       'manage_options',
       'dia-ip-guardian',
@@ -362,7 +468,7 @@ class DIA_IP_Guardian
     $nonce = wp_create_nonce('dia_ipg_nonce');
     ?>
     <div class="wrap">
-      <h1>DIA IP Guardian</h1>
+      <h1>IP Guardian</h1>
       <p style="max-width: 900px;">
         Tracks visitor IPs and lets you block them. <strong>Note:</strong> IP logging may be personal data — mention it in
         your privacy policy if needed.
@@ -435,91 +541,66 @@ class DIA_IP_Guardian
       <hr />
 
       <h2>Top IPs — last 24 hours</h2>
-      <?php self::render_top_table($top24, $blocked); ?>
-
+      <?php self::render_top_table($top24, $blocked, 'top24'); ?>
       <h2 style="margin-top: 28px;">Top IPs — last 7 days</h2>
-      <?php self::render_top_table($top7d, $blocked); ?>
+      <?php self::render_top_table($top7d, $blocked, 'top7d'); ?>
 
       <hr />
 
       <h2>Recent visits</h2>
-      <table class="widefat striped">
-        <thead>
-          <tr>
-            <th>Time</th>
-            <th>IP</th>
-            <th>URL</th>
-            <th>User Agent</th>
-            <th>Action</th>
-          </tr>
-        </thead>
-        <tbody>
-          <?php foreach ($recent as $r): ?>
+      <div style="max-width: 50%;">
+        <table class="widefat striped">
+          <thead>
             <tr>
-              <td><?php echo esc_html($r['created_at']); ?></td>
-              <td><code><?php echo esc_html($r['ip']); ?></code></td>
-              <td style="max-width: 520px; overflow: hidden; text-overflow: ellipsis;">
-                <a href="<?php echo esc_url($r['url']); ?>" target="_blank" rel="noopener noreferrer">
-                  <?php echo esc_html($r['url']); ?>
-                </a>
-              </td>
-              <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis;">
-                <?php echo esc_html($r['user_agent']); ?>
-              </td>
-              <td>
-                <?php if (in_array($r['ip'], $blocked, true)): ?>
-                  <a class="button" href="<?php echo esc_url(self::admin_url_action('unblock', $r['ip'])); ?>">Unblock</a>
-                <?php else: ?>
-                  <a class="button button-primary"
-                    href="<?php echo esc_url(self::admin_url_action('block', $r['ip'])); ?>">Block</a>
-                <?php endif; ?>
-              </td>
+              <th>Time</th>
+              <th>IP</th>
+              <th>URL</th>
+              <th>User Agent</th>
+              <th>Action</th>
             </tr>
-          <?php endforeach; ?>
-        </tbody>
-      </table>
-
+          </thead>
+          <tbody>
+            <?php foreach ($recent as $r): ?>
+              <tr>
+                <td><?php echo esc_html($r['created_at']); ?></td>
+                <td><code><?php echo esc_html($r['ip']); ?></code></td>
+                <td style="max-width: 520px; overflow: hidden; text-overflow: ellipsis;">
+                  <a href="<?php echo esc_url($r['url']); ?>" target="_blank" rel="noopener noreferrer">
+                    <?php echo esc_html($r['url']); ?>
+                  </a>
+                </td>
+                <td style="max-width: 320px; overflow: hidden; text-overflow: ellipsis;">
+                  <?php echo esc_html($r['user_agent']); ?>
+                </td>
+                <td>
+                  <?php if (in_array($r['ip'], $blocked, true)): ?>
+                    <a class="button" href="<?php echo esc_url(self::admin_url_action('unblock', $r['ip'])); ?>">Unblock</a>
+                  <?php else: ?>
+                    <a class="button button-primary"
+                      href="<?php echo esc_url(self::admin_url_action('block', $r['ip'])); ?>">Block</a>
+                  <?php endif; ?>
+                </td>
+              </tr>
+            <?php endforeach; ?>
+          </tbody>
+        </table>
+      </div>
     </div>
     <?php
   }
 
-  private static function render_top_table($rows, $blocked)
+  private static function render_top_table($rows, $blocked, $table_id)
   {
-    ?>
-    <table class="widefat striped">
-      <thead>
-        <tr>
-          <th>IP</th>
-          <th>Hits</th>
-          <th>Last seen</th>
-          <th>Action</th>
-        </tr>
-      </thead>
-      <tbody>
-        <?php if (empty($rows)): ?>
-          <tr>
-            <td colspan="4">No data yet.</td>
-          </tr>
-        <?php else: ?>
-          <?php foreach ($rows as $row): ?>
-            <tr>
-              <td><code><?php echo esc_html($row['ip']); ?></code></td>
-              <td><?php echo esc_html($row['hits']); ?></td>
-              <td><?php echo esc_html($row['last_seen']); ?></td>
-              <td>
-                <?php if (in_array($row['ip'], $blocked, true)): ?>
-                  <a class="button" href="<?php echo esc_url(self::admin_url_action('unblock', $row['ip'])); ?>">Unblock</a>
-                <?php else: ?>
-                  <a class="button button-primary"
-                    href="<?php echo esc_url(self::admin_url_action('block', $row['ip'])); ?>">Block</a>
-                <?php endif; ?>
-              </td>
-            </tr>
-          <?php endforeach; ?>
-        <?php endif; ?>
-      </tbody>
-    </table>
-    <?php
+    $t = new DIA_IPG_Top_IPs_Table($rows, $blocked, $table_id);
+    $t->prepare_items();
+
+    // Keep sorting separate for 24h vs 7d by using different query vars
+    // (WP_List_Table uses global orderby/order, so we namespace them)
+    // Simple approach: render as-is; both tables will sort together based on current URL params.
+
+    echo '<div style="margin-top:10px;">';
+    $t->display();
+    echo '</div>';
   }
 }
 
