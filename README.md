@@ -124,11 +124,19 @@ Built as a small internal tool and shared publicly for developers who want a cle
 
 ---
 
-## 📷 Screenshots (optional)
-- Overview / Top IPs
-- Country filter dropdown
-- Recent visitor activity table
-- Settings screen
+## 📷 Screenshots
+
+### Overview – Top IPs
+![Overview](assets/screenshots/overview.png)
+
+### Overview – Country Filter (All Countries)
+![Overview All Countries](assets/screenshots/overview%20-%20all%20countries.png)
+
+### Recent Visitor Activity
+![Visitor Activity](assets/screenshots/Visitor%20activity.png)
+
+### Settings Screen
+![Settings](assets/screenshots/settings.png)
 
 ---
 
