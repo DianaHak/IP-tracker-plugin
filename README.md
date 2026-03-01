@@ -127,16 +127,16 @@ Built as a small internal tool and shared publicly for developers who want a cle
 ## 📷 Screenshots
 
 ### Overview – Top IPs
-![Overview](assets/screenshots/overview.png)
+![Overview](dia-ip-guardian/assets/screenshots/overview.png)
 
 ### Overview – Country Filter (All Countries)
-![Overview All Countries](assets/screenshots/overview%20-%20all%20countries.png)
+![Overview All Countries](dia-ip-guardian/assets/screenshots/overview%20-%20all%20countries.png)
 
 ### Recent Visitor Activity
-![Visitor Activity](assets/screenshots/Visitor%20activity.png)
+![Visitor Activity](dia-ip-guardian/assets/screenshots/Visitor%20activity.png)
 
 ### Settings Screen
-![Settings](assets/screenshots/settings.png)
+![Settings](dia-ip-guardian/assets/screenshots/settings.png)
 
 ---
 
