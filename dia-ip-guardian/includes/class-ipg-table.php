@@ -1,18 +1,23 @@
 <?php
-if (!defined('ABSPATH')) exit;
+if (!defined('ABSPATH'))
+  exit;
 
-class DIA_IPG_Table {
+class DIA_IPG_Table
+{
 
   /**
    * Format a MySQL DATETIME string for display in WP timezone.
    */
-  private static function fmt_dt($mysql_dt) {
+  private static function fmt_dt($mysql_dt)
+  {
     $s = trim((string) $mysql_dt);
-    if ($s === '' || $s === '0000-00-00 00:00:00') return '';
+    if ($s === '' || $s === '0000-00-00 00:00:00')
+      return '';
 
     $mode = apply_filters('dia_ipg_dt_storage_mode', 'auto');
     $mode = is_string($mode) ? strtolower($mode) : 'auto';
-    if (!in_array($mode, ['auto', 'utc', 'local'], true)) $mode = 'auto';
+    if (!in_array($mode, ['auto', 'utc', 'local'], true))
+      $mode = 'auto';
 
     try {
       $wp_tz = wp_timezone();
@@ -27,15 +32,15 @@ class DIA_IPG_Table {
       }
 
       // AUTO: choose the interpretation closer to "now"
-      $dt_utc   = new DateTimeImmutable($s, new DateTimeZone('UTC'));
-      $as_wp_1  = $dt_utc->setTimezone($wp_tz);
+      $dt_utc = new DateTimeImmutable($s, new DateTimeZone('UTC'));
+      $as_wp_1 = $dt_utc->setTimezone($wp_tz);
 
       $dt_local = new DateTimeImmutable($s, $wp_tz);
-      $as_wp_2  = $dt_local;
+      $as_wp_2 = $dt_local;
 
       $now = time();
-      $t1  = $as_wp_1->getTimestamp();
-      $t2  = $as_wp_2->getTimestamp();
+      $t1 = $as_wp_1->getTimestamp();
+      $t2 = $as_wp_2->getTimestamp();
 
       $d1 = abs($now - $t1);
       $d2 = abs($now - $t2);
@@ -49,7 +54,8 @@ class DIA_IPG_Table {
     }
   }
 
-  private static function per_page_select($table_key, $per_page) {
+  private static function per_page_select($table_key, $per_page)
+  {
     $opts = [20, 50, 100, 500];
 
     echo '<label style="display:inline-flex;gap:8px;align-items:center;">';
@@ -70,19 +76,24 @@ class DIA_IPG_Table {
   /**
    * Trustworthy IP info source (ASN, org, prefix, RPKI, etc)
    */
-  private static function whois_url(string $ip): string {
+  private static function whois_url(string $ip): string
+  {
     return 'https://stat.ripe.net/' . rawurlencode($ip);
   }
 
-  private static function whois_button(string $ip): string {
-    if (!$ip) return '';
+  private static function whois_button(string $ip): string
+  {
+    if (!$ip)
+      return '';
     $url = self::whois_url($ip);
     return '<a class="button" href="' . esc_url($url) . '" target="_blank" rel="noopener noreferrer">WHOIS</a>';
   }
 
-  private static function pagination($table_key, $page, $per_page, $total) {
+  private static function pagination($table_key, $page, $per_page, $total)
+  {
     $total_pages = (int) ceil(max(1, $total) / max(1, $per_page));
-    if ($total_pages <= 1) return;
+    if ($total_pages <= 1)
+      return;
 
     $prev = max(1, $page - 1);
     $next = min($total_pages, $page + 1);
@@ -112,10 +123,12 @@ class DIA_IPG_Table {
     echo '</div>';
   }
 
-  private static function sort_link($table_key, $label, $orderby_key, $current_orderby, $current_order) {
+  private static function sort_link($table_key, $label, $orderby_key, $current_orderby, $current_order)
+  {
     $is = ($current_orderby === $orderby_key);
     $current_order = strtoupper((string) $current_order);
-    if (!in_array($current_order, ['ASC', 'DESC'], true)) $current_order = 'DESC';
+    if (!in_array($current_order, ['ASC', 'DESC'], true))
+      $current_order = 'DESC';
 
     $next_order = ($is && $current_order === 'DESC') ? 'ASC' : 'DESC';
     $arrow = $is ? (($current_order === 'DESC') ? ' ▼' : ' ▲') : '';
@@ -130,61 +143,247 @@ class DIA_IPG_Table {
     );
   }
 
+  private static function normalize_cc(string $cc): string
+  {
+    $cc = strtoupper(trim($cc));
+    // normalize common alias
+    if ($cc === 'UK')
+      $cc = 'GB';
+    return $cc;
+  }
+
   /**
    * Country name (full), uses WooCommerce if available, else fallback map.
    */
-  private static function country_name(string $cc): string {
-    $cc = strtoupper(trim($cc));
-    if (!preg_match('/^[A-Z]{2}$/', $cc) || $cc === 'XX') return $cc;
+  private static function country_name(string $cc): string
+  {
+    $cc = self::normalize_cc($cc);
+    if (!preg_match('/^[A-Z]{2}$/', $cc) || $cc === 'XX')
+      return $cc;
 
     if (class_exists('WC_Countries')) {
       $wc = new WC_Countries();
       $countries = (array) $wc->get_countries();
-      if (!empty($countries[$cc])) return (string) $countries[$cc];
+      if (!empty($countries[$cc])) {
+        $name = (string) $countries[$cc];
+
+        // WooCommerce shows "United Kingdom (UK)" for GB — remove the alias part
+        if ($cc === 'GB') {
+          $name = preg_replace('/\s*\(UK\)\s*$/u', '', $name);
+          $name = trim((string) $name);
+        }
+
+        return $name;
+      }
     }
 
     static $map = [
-      'AF' => 'Afghanistan','AL' => 'Albania','DZ' => 'Algeria','AS' => 'American Samoa','AD' => 'Andorra',
-      'AO' => 'Angola','AI' => 'Anguilla','AQ' => 'Antarctica','AG' => 'Antigua and Barbuda','AR' => 'Argentina',
-      'AM' => 'Armenia','AW' => 'Aruba','AU' => 'Australia','AT' => 'Austria','AZ' => 'Azerbaijan',
-      'BS' => 'Bahamas','BH' => 'Bahrain','BD' => 'Bangladesh','BB' => 'Barbados','BY' => 'Belarus',
-      'BE' => 'Belgium','BZ' => 'Belize','BJ' => 'Benin','BM' => 'Bermuda','BT' => 'Bhutan',
-      'BO' => 'Bolivia','BA' => 'Bosnia and Herzegovina','BW' => 'Botswana','BR' => 'Brazil','BN' => 'Brunei',
-      'BG' => 'Bulgaria','BF' => 'Burkina Faso','BI' => 'Burundi','KH' => 'Cambodia','CM' => 'Cameroon',
-      'CA' => 'Canada','CV' => 'Cape Verde','KY' => 'Cayman Islands','CF' => 'Central African Republic','TD' => 'Chad',
-      'CL' => 'Chile','CN' => 'China','CO' => 'Colombia','KM' => 'Comoros','CG' => 'Congo',
-      'CD' => 'Congo (Democratic Republic)','CR' => 'Costa Rica','CI' => 'Côte d’Ivoire','HR' => 'Croatia','CU' => 'Cuba',
-      'CY' => 'Cyprus','CZ' => 'Czech Republic','DK' => 'Denmark','DJ' => 'Djibouti','DM' => 'Dominica',
-      'DO' => 'Dominican Republic','EC' => 'Ecuador','EG' => 'Egypt','SV' => 'El Salvador','GQ' => 'Equatorial Guinea',
-      'ER' => 'Eritrea','EE' => 'Estonia','ET' => 'Ethiopia','FJ' => 'Fiji','FI' => 'Finland',
-      'FR' => 'France','GF' => 'French Guiana','GA' => 'Gabon','GM' => 'Gambia','GE' => 'Georgia',
-      'DE' => 'Germany','GH' => 'Ghana','GI' => 'Gibraltar','GR' => 'Greece','GL' => 'Greenland',
-      'GD' => 'Grenada','GP' => 'Guadeloupe','GU' => 'Guam','GT' => 'Guatemala','GN' => 'Guinea',
-      'GW' => 'Guinea-Bissau','GY' => 'Guyana','HT' => 'Haiti','HN' => 'Honduras','HK' => 'Hong Kong',
-      'HU' => 'Hungary','IS' => 'Iceland','IN' => 'India','ID' => 'Indonesia','IR' => 'Iran',
-      'IQ' => 'Iraq','IE' => 'Ireland','IL' => 'Israel','IT' => 'Italy','JM' => 'Jamaica',
-      'JP' => 'Japan','JO' => 'Jordan','KZ' => 'Kazakhstan','KE' => 'Kenya','KI' => 'Kiribati',
-      'KW' => 'Kuwait','KG' => 'Kyrgyzstan','LA' => 'Laos','LV' => 'Latvia','LB' => 'Lebanon',
-      'LS' => 'Lesotho','LR' => 'Liberia','LY' => 'Libya','LI' => 'Liechtenstein','LT' => 'Lithuania',
-      'LU' => 'Luxembourg','MO' => 'Macau','MK' => 'North Macedonia','MG' => 'Madagascar','MW' => 'Malawi',
-      'MY' => 'Malaysia','MV' => 'Maldives','ML' => 'Mali','MT' => 'Malta','MH' => 'Marshall Islands',
-      'MQ' => 'Martinique','MR' => 'Mauritania','MU' => 'Mauritius','MX' => 'Mexico','FM' => 'Micronesia',
-      'MD' => 'Moldova','MC' => 'Monaco','MN' => 'Mongolia','ME' => 'Montenegro','MA' => 'Morocco',
-      'MZ' => 'Mozambique','MM' => 'Myanmar','NA' => 'Namibia','NR' => 'Nauru','NP' => 'Nepal',
-      'NL' => 'Netherlands','NZ' => 'New Zealand','NI' => 'Nicaragua','NE' => 'Niger','NG' => 'Nigeria',
-      'KP' => 'North Korea','NO' => 'Norway','OM' => 'Oman','PK' => 'Pakistan','PA' => 'Panama',
-      'PG' => 'Papua New Guinea','PY' => 'Paraguay','PE' => 'Peru','PH' => 'Philippines','PL' => 'Poland',
-      'PT' => 'Portugal','PR' => 'Puerto Rico','QA' => 'Qatar','RO' => 'Romania','RU' => 'Russia',
-      'RW' => 'Rwanda','KN' => 'Saint Kitts and Nevis','LC' => 'Saint Lucia','VC' => 'Saint Vincent and the Grenadines','WS' => 'Samoa','SM' => 'San Marino',
-      'ST' => 'Sao Tome and Principe','SA' => 'Saudi Arabia','SN' => 'Senegal','RS' => 'Serbia','SC' => 'Seychelles',
-      'SL' => 'Sierra Leone','SG' => 'Singapore','SK' => 'Slovakia','SI' => 'Slovenia','SB' => 'Solomon Islands',
-      'SO' => 'Somalia','ZA' => 'South Africa','KR' => 'South Korea','ES' => 'Spain','LK' => 'Sri Lanka',
-      'SD' => 'Sudan','SR' => 'Suriname','SE' => 'Sweden','CH' => 'Switzerland','SY' => 'Syria',
-      'TW' => 'Taiwan','TJ' => 'Tajikistan','TZ' => 'Tanzania','TH' => 'Thailand','TL' => 'Timor-Leste',
-      'TG' => 'Togo','TO' => 'Tonga','TT' => 'Trinidad and Tobago','TN' => 'Tunisia','TR' => 'Turkey',
-      'TM' => 'Turkmenistan','UG' => 'Uganda','UA' => 'Ukraine','AE' => 'United Arab Emirates','GB' => 'United Kingdom',
-      'US' => 'United States','UY' => 'Uruguay','UZ' => 'Uzbekistan','VU' => 'Vanuatu','VA' => 'Vatican City',
-      'VE' => 'Venezuela','VN' => 'Vietnam','YE' => 'Yemen','ZM' => 'Zambia','ZW' => 'Zimbabwe',
+    'AF' => 'Afghanistan',
+    'AL' => 'Albania',
+    'DZ' => 'Algeria',
+    'AS' => 'American Samoa',
+    'AD' => 'Andorra',
+    'AO' => 'Angola',
+    'AI' => 'Anguilla',
+    'AQ' => 'Antarctica',
+    'AG' => 'Antigua and Barbuda',
+    'AR' => 'Argentina',
+    'AM' => 'Armenia',
+    'AW' => 'Aruba',
+    'AU' => 'Australia',
+    'AT' => 'Austria',
+    'AZ' => 'Azerbaijan',
+    'BS' => 'Bahamas',
+    'BH' => 'Bahrain',
+    'BD' => 'Bangladesh',
+    'BB' => 'Barbados',
+    'BY' => 'Belarus',
+    'BE' => 'Belgium',
+    'BZ' => 'Belize',
+    'BJ' => 'Benin',
+    'BM' => 'Bermuda',
+    'BT' => 'Bhutan',
+    'BO' => 'Bolivia',
+    'BA' => 'Bosnia and Herzegovina',
+    'BW' => 'Botswana',
+    'BR' => 'Brazil',
+    'BN' => 'Brunei',
+    'BG' => 'Bulgaria',
+    'BF' => 'Burkina Faso',
+    'BI' => 'Burundi',
+    'KH' => 'Cambodia',
+    'CM' => 'Cameroon',
+    'CA' => 'Canada',
+    'CV' => 'Cape Verde',
+    'KY' => 'Cayman Islands',
+    'CF' => 'Central African Republic',
+    'TD' => 'Chad',
+    'CL' => 'Chile',
+    'CN' => 'China',
+    'CO' => 'Colombia',
+    'KM' => 'Comoros',
+    'CG' => 'Congo',
+    'CD' => 'Congo (Democratic Republic)',
+    'CR' => 'Costa Rica',
+    'CI' => 'Côte d’Ivoire',
+    'HR' => 'Croatia',
+    'CU' => 'Cuba',
+    'CY' => 'Cyprus',
+    'CZ' => 'Czech Republic',
+    'DK' => 'Denmark',
+    'DJ' => 'Djibouti',
+    'DM' => 'Dominica',
+    'DO' => 'Dominican Republic',
+    'EC' => 'Ecuador',
+    'EG' => 'Egypt',
+    'SV' => 'El Salvador',
+    'GQ' => 'Equatorial Guinea',
+    'ER' => 'Eritrea',
+    'EE' => 'Estonia',
+    'ET' => 'Ethiopia',
+    'FJ' => 'Fiji',
+    'FI' => 'Finland',
+    'FR' => 'France',
+    'GF' => 'French Guiana',
+    'GA' => 'Gabon',
+    'GM' => 'Gambia',
+    'GE' => 'Georgia',
+    'DE' => 'Germany',
+    'GH' => 'Ghana',
+    'GI' => 'Gibraltar',
+    'GR' => 'Greece',
+    'GL' => 'Greenland',
+    'GD' => 'Grenada',
+    'GP' => 'Guadeloupe',
+    'GU' => 'Guam',
+    'GT' => 'Guatemala',
+    'GN' => 'Guinea',
+    'GW' => 'Guinea-Bissau',
+    'GY' => 'Guyana',
+    'HT' => 'Haiti',
+    'HN' => 'Honduras',
+    'HK' => 'Hong Kong',
+    'HU' => 'Hungary',
+    'IS' => 'Iceland',
+    'IN' => 'India',
+    'ID' => 'Indonesia',
+    'IR' => 'Iran',
+    'IQ' => 'Iraq',
+    'IE' => 'Ireland',
+    'IL' => 'Israel',
+    'IT' => 'Italy',
+    'JM' => 'Jamaica',
+    'JP' => 'Japan',
+    'JO' => 'Jordan',
+    'KZ' => 'Kazakhstan',
+    'KE' => 'Kenya',
+    'KI' => 'Kiribati',
+    'KW' => 'Kuwait',
+    'KG' => 'Kyrgyzstan',
+    'LA' => 'Laos',
+    'LV' => 'Latvia',
+    'LB' => 'Lebanon',
+    'LS' => 'Lesotho',
+    'LR' => 'Liberia',
+    'LY' => 'Libya',
+    'LI' => 'Liechtenstein',
+    'LT' => 'Lithuania',
+    'LU' => 'Luxembourg',
+    'MO' => 'Macau',
+    'MK' => 'North Macedonia',
+    'MG' => 'Madagascar',
+    'MW' => 'Malawi',
+    'MY' => 'Malaysia',
+    'MV' => 'Maldives',
+    'ML' => 'Mali',
+    'MT' => 'Malta',
+    'MH' => 'Marshall Islands',
+    'MQ' => 'Martinique',
+    'MR' => 'Mauritania',
+    'MU' => 'Mauritius',
+    'MX' => 'Mexico',
+    'FM' => 'Micronesia',
+    'MD' => 'Moldova',
+    'MC' => 'Monaco',
+    'MN' => 'Mongolia',
+    'ME' => 'Montenegro',
+    'MA' => 'Morocco',
+    'MZ' => 'Mozambique',
+    'MM' => 'Myanmar',
+    'NA' => 'Namibia',
+    'NR' => 'Nauru',
+    'NP' => 'Nepal',
+    'NL' => 'Netherlands',
+    'NZ' => 'New Zealand',
+    'NI' => 'Nicaragua',
+    'NE' => 'Niger',
+    'NG' => 'Nigeria',
+    'KP' => 'North Korea',
+    'NO' => 'Norway',
+    'OM' => 'Oman',
+    'PK' => 'Pakistan',
+    'PA' => 'Panama',
+    'PG' => 'Papua New Guinea',
+    'PY' => 'Paraguay',
+    'PE' => 'Peru',
+    'PH' => 'Philippines',
+    'PL' => 'Poland',
+    'PT' => 'Portugal',
+    'PR' => 'Puerto Rico',
+    'QA' => 'Qatar',
+    'RO' => 'Romania',
+    'RU' => 'Russia',
+    'RW' => 'Rwanda',
+    'KN' => 'Saint Kitts and Nevis',
+    'LC' => 'Saint Lucia',
+    'VC' => 'Saint Vincent and the Grenadines',
+    'WS' => 'Samoa',
+    'SM' => 'San Marino',
+    'ST' => 'Sao Tome and Principe',
+    'SA' => 'Saudi Arabia',
+    'SN' => 'Senegal',
+    'RS' => 'Serbia',
+    'SC' => 'Seychelles',
+    'SL' => 'Sierra Leone',
+    'SG' => 'Singapore',
+    'SK' => 'Slovakia',
+    'SI' => 'Slovenia',
+    'SB' => 'Solomon Islands',
+    'SO' => 'Somalia',
+    'ZA' => 'South Africa',
+    'KR' => 'South Korea',
+    'ES' => 'Spain',
+    'LK' => 'Sri Lanka',
+    'SD' => 'Sudan',
+    'SR' => 'Suriname',
+    'SE' => 'Sweden',
+    'CH' => 'Switzerland',
+    'SY' => 'Syria',
+    'TW' => 'Taiwan',
+    'TJ' => 'Tajikistan',
+    'TZ' => 'Tanzania',
+    'TH' => 'Thailand',
+    'TL' => 'Timor-Leste',
+    'TG' => 'Togo',
+    'TO' => 'Tonga',
+    'TT' => 'Trinidad and Tobago',
+    'TN' => 'Tunisia',
+    'TR' => 'Turkey',
+    'TM' => 'Turkmenistan',
+    'UG' => 'Uganda',
+    'UA' => 'Ukraine',
+    'AE' => 'United Arab Emirates',
+    'GB' => 'United Kingdom',
+    'US' => 'United States',
+    'UY' => 'Uruguay',
+    'UZ' => 'Uzbekistan',
+    'VU' => 'Vanuatu',
+    'VA' => 'Vatican City',
+    'VE' => 'Venezuela',
+    'VN' => 'Vietnam',
+    'YE' => 'Yemen',
+    'ZM' => 'Zambia',
+    'ZW' => 'Zimbabwe',
     ];
 
     return $map[$cc] ?? $cc;
@@ -196,21 +395,21 @@ class DIA_IPG_Table {
    * - If image blocked (CSP/adblock/CDN), fallback to emoji automatically
    * - If no country, show neutral placeholder
    */
-  private static function safe_flag_html($cc) {
-    $cc = strtoupper(trim((string)$cc));
+  private static function safe_flag_html($cc)
+  {
+    $cc = self::normalize_cc((string) $cc);
+
     if ($cc && preg_match('/^[A-Z]{2}$/', $cc) && $cc !== 'XX') {
-
-      // Twemoji SVG
       $img = (string) DIA_IPG_Geo::render_flag_img($cc);
-
-      // Emoji fallback
       $emoji = (string) DIA_IPG_Geo::render_flag($cc);
 
-      // If render_flag_img returns empty for any reason, return emoji (still a flag)
-      if ($img === '') return $emoji !== '' ? $emoji : '<span style="display:inline-block;width:16px;height:16px;margin-right:6px;opacity:.35;vertical-align:-3px;">🏳️</span>';
+      if ($img === '') {
+        return $emoji !== ''
+          ? $emoji
+          : '<span style="display:inline-block;width:16px;height:16px;margin-right:6px;opacity:.35;vertical-align:-3px;">🏳️</span>';
+      }
 
-      // Add onerror fallback -> emoji
-      // (Works great when CDN is blocked on one site but not the other.)
+      // onerror fallback -> emoji
       $img = str_replace(
         '<img ',
         '<img onerror="this.outerHTML=' . esc_attr(json_encode($emoji)) . ';" ',
@@ -223,21 +422,24 @@ class DIA_IPG_Table {
     return '<span style="display:inline-block;width:16px;height:16px;margin-right:6px;opacity:.35;vertical-align:-3px;">🏳️</span>';
   }
 
-  public static function render_top_ips_table(array $args) {
+  public static function render_top_ips_table(array $args)
+  {
     $table_key = (string) ($args['table_key'] ?? '');
-    $rows      = (array)  ($args['rows'] ?? []);
-    $total     = (int)    ($args['total'] ?? 0);
-    $page      = (int)    ($args['page'] ?? 1);
-    $per_page  = (int)    ($args['per_page'] ?? 50);
-    $orderby   = (string) ($args['orderby'] ?? 'hits');
-    $order     = (string) ($args['order'] ?? 'DESC');
-    $blocked   = (array)  ($args['blocked'] ?? []);
-    $title     = (string) ($args['title'] ?? '');
+    $rows = (array) ($args['rows'] ?? []);
+    $total = (int) ($args['total'] ?? 0);
+    $page = (int) ($args['page'] ?? 1);
+    $per_page = (int) ($args['per_page'] ?? 50);
+    $orderby = (string) ($args['orderby'] ?? 'hits');
+    $order = (string) ($args['order'] ?? 'DESC');
+    $blocked = (array) ($args['blocked'] ?? []);
+    $title = (string) ($args['title'] ?? '');
 
-    // country filter + list
-    $country_filter = strtoupper(trim((string)($args['country'] ?? '')));
-    if ($country_filter !== '' && !preg_match('/^[A-Z]{2}$/', $country_filter)) $country_filter = '';
-    $countries = (array)($args['countries'] ?? []);
+    // ✅ normalize filter (fixes UK/GB selection)
+    $country_filter = self::normalize_cc((string) ($args['country'] ?? ''));
+    if ($country_filter !== '' && !preg_match('/^[A-Z]{2}$/', $country_filter))
+      $country_filter = '';
+
+    $countries = (array) ($args['countries'] ?? []);
 
     echo '<div class="ipg-table-wrap"'
       . ' data-ipg-table="' . esc_attr($table_key) . '"'
@@ -252,16 +454,27 @@ class DIA_IPG_Table {
 
     // Left: Country dropdown
     echo '<div style="display:flex;align-items:center;gap:10px;">';
-    echo '<strong style="font-size:14px;">Country:</strong>';
+    echo '<strong style="font-size:14px;">country:</strong>';
 
     echo '<select class="ipg-country-filter" data-table="' . esc_attr($table_key) . '" style="min-width:190px;">';
     echo '<option value="">' . esc_html__('All countries', 'dia-ipg') . '</option>';
 
-    foreach ($countries as $cc) {
-      $cc = strtoupper(trim((string)$cc));
-      if (!preg_match('/^[A-Z]{2}$/', $cc) || $cc === 'XX') continue;
+    // normalize + de-dupe (fixes UK/GB duplicates)
+    $norm = [];
+    foreach ($countries as $x) {
+      $x = self::normalize_cc((string) $x);
+      if (preg_match('/^[A-Z]{2}$/', $x) && $x !== 'XX')
+        $norm[] = $x;
+    }
+    $countries = array_values(array_unique($norm));
+    sort($countries);
 
-      $label = self::country_name($cc) . " ({$cc})";
+    foreach ($countries as $cc) {
+      $name = self::country_name($cc);
+
+      // If name already ends with "(CC)", don't add it again (fixes US/US)
+      $ends_with_code = (bool) preg_match('/\(\s*' . preg_quote($cc, '/') . '\s*\)\s*$/u', $name);
+      $label = $ends_with_code ? $name : ($name . " ({$cc})");
 
       printf(
         '<option value="%s"%s>%s</option>',
@@ -289,8 +502,12 @@ class DIA_IPG_Table {
     echo '<thead><tr>';
     echo '<th>IP</th>';
     echo '<th style="width:90px;">Check</th>';
-    echo '<th>'; self::sort_link($table_key, 'Hits', 'hits', $orderby, $order); echo '</th>';
-    echo '<th>'; self::sort_link($table_key, 'Last seen', 'last_seen', $orderby, $order); echo ' (WordPress time)</th>';
+    echo '<th>';
+    self::sort_link($table_key, 'Hits', 'hits', $orderby, $order);
+    echo '</th>';
+    echo '<th>';
+    self::sort_link($table_key, 'Last seen', 'last_seen', $orderby, $order);
+    echo ' (WordPress time)</th>';
     echo '<th>Action</th>';
     echo '</tr></thead>';
 
@@ -302,18 +519,24 @@ class DIA_IPG_Table {
       $cc_cache = [];
 
       foreach ($rows as $r) {
-        $ip        = (string) ($r['ip'] ?? '');
-        $hits      = (int)    ($r['hits'] ?? 0);
+        $ip = (string) ($r['ip'] ?? '');
+        $hits = (int) ($r['hits'] ?? 0);
         $last_seen = (string) ($r['last_seen'] ?? '');
 
         $cc = (string) ($r['country'] ?? '');
         if ($ip !== '' && ($cc === '' || !preg_match('/^[A-Z]{2}$/', $cc))) {
-          if (!isset($cc_cache[$ip])) $cc_cache[$ip] = (string) DIA_IPG_Geo::resolve_country_for_ip($ip);
+          if (!isset($cc_cache[$ip]))
+            $cc_cache[$ip] = (string) DIA_IPG_Geo::resolve_country_for_ip($ip);
           $cc = (string) $cc_cache[$ip];
         }
 
-        $flag   = self::safe_flag_html($cc);
-        $suffix = $cc ? '<span style="opacity:.7;margin-left:6px;">' . esc_html(strtoupper($cc)) . '</span>' : '';
+        // ✅ normalize final (fixes suffix showing UK)
+        $cc = self::normalize_cc((string) $cc);
+
+        $flag = self::safe_flag_html($cc);
+        $suffix = ($cc && preg_match('/^[A-Z]{2}$/', $cc) && $cc !== 'XX')
+          ? '<span style="opacity:.7;margin-left:6px;">' . esc_html($cc) . '</span>'
+          : '';
 
         $hits_html = esc_html((string) $hits);
         if ($hits >= 1000) {
@@ -323,14 +546,14 @@ class DIA_IPG_Table {
         }
 
         $is_blocked = ($ip && in_array($ip, $blocked, true));
-        $act   = $is_blocked ? 'unblock' : 'block';
+        $act = $is_blocked ? 'unblock' : 'block';
         $label = $is_blocked ? 'unblock' : 'block';
         $class = $is_blocked ? 'button' : 'button button-primary';
 
         $action_url = admin_url('admin-post.php?' . http_build_query([
-          'action'   => 'dia_ipg_action',
-          'do'       => $act,
-          'ip'       => $ip,
+          'action' => 'dia_ipg_action',
+          'do' => $act,
+          'ip' => $ip,
           '_wpnonce' => wp_create_nonce('dia_ipg_nonce'),
         ]));
 
@@ -340,7 +563,8 @@ class DIA_IPG_Table {
         echo '<td>' . $hits_html . '</td>';
         echo '<td>' . esc_html(self::fmt_dt($last_seen)) . '</td>';
         echo '<td>';
-        if ($ip) echo '<a class="' . esc_attr($class) . '" href="' . esc_url($action_url) . '">' . esc_html($label) . '</a>';
+        if ($ip)
+          echo '<a class="' . esc_attr($class) . '" href="' . esc_url($action_url) . '">' . esc_html($label) . '</a>';
         echo '</td>';
         echo '</tr>';
       }
@@ -352,19 +576,21 @@ class DIA_IPG_Table {
     echo '</div>';
   }
 
-  public static function render_recent_table(array $args) {
-    $rows         = (array) ($args['rows'] ?? []);
-    $total        = (int)   ($args['total'] ?? 0);
-    $page         = (int)   ($args['page'] ?? 1);
-    $per_page     = (int)   ($args['per_page'] ?? 50);
-    $order        = strtoupper((string) ($args['order'] ?? 'DESC'));
-    $recent_hours = (int)   ($args['recent_hours'] ?? 24);
-    $blocked      = (array) ($args['blocked'] ?? []);
-    $title        = (string)($args['title'] ?? '');
+  public static function render_recent_table(array $args)
+  {
+    $rows = (array) ($args['rows'] ?? []);
+    $total = (int) ($args['total'] ?? 0);
+    $page = (int) ($args['page'] ?? 1);
+    $per_page = (int) ($args['per_page'] ?? 50);
+    $order = strtoupper((string) ($args['order'] ?? 'DESC'));
+    $recent_hours = (int) ($args['recent_hours'] ?? 24);
+    $blocked = (array) ($args['blocked'] ?? []);
+    $title = (string) ($args['title'] ?? '');
 
-    if (!in_array($order, ['ASC', 'DESC'], true)) $order = 'DESC';
+    if (!in_array($order, ['ASC', 'DESC'], true))
+      $order = 'DESC';
 
-    $arrow      = ($order === 'DESC') ? ' ▼' : ' ▲';
+    $arrow = ($order === 'DESC') ? ' ▼' : ' ▲';
     $next_order = ($order === 'DESC') ? 'ASC' : 'DESC';
 
     echo '<div class="ipg-table-wrap" style="max-width:980px;" data-ipg-table="recent" data-orderby="created_at" data-order="' . esc_attr($order) . '" data-page="' . esc_attr($page) . '" data-per-page="' . esc_attr($per_page) . '" data-recent-hours="' . esc_attr($recent_hours) . '">';
@@ -402,26 +628,32 @@ class DIA_IPG_Table {
 
         $cc = (string) ($r['country'] ?? '');
         if ($ip !== '' && ($cc === '' || !preg_match('/^[A-Z]{2}$/', $cc))) {
-          if (!isset($cc_cache[$ip])) $cc_cache[$ip] = (string) DIA_IPG_Geo::resolve_country_for_ip($ip);
+          if (!isset($cc_cache[$ip]))
+            $cc_cache[$ip] = (string) DIA_IPG_Geo::resolve_country_for_ip($ip);
           $cc = (string) $cc_cache[$ip];
         }
 
-        $flag   = self::safe_flag_html($cc);
-        $suffix = $cc ? '<span style="opacity:.7;margin-left:6px;">' . esc_html(strtoupper($cc)) . '</span>' : '';
+        // ✅ normalize final (fixes suffix showing UK)
+        $cc = self::normalize_cc((string) $cc);
+
+        $flag = self::safe_flag_html($cc);
+        $suffix = ($cc && preg_match('/^[A-Z]{2}$/', $cc) && $cc !== 'XX')
+          ? '<span style="opacity:.7;margin-left:6px;">' . esc_html($cc) . '</span>'
+          : '';
 
         $is_blocked = ($ip && in_array($ip, $blocked, true));
-        $act   = $is_blocked ? 'unblock' : 'block';
+        $act = $is_blocked ? 'unblock' : 'block';
         $label = $is_blocked ? 'unblock' : 'block';
         $class = $is_blocked ? 'button' : 'button button-primary';
 
         $action_url = admin_url('admin-post.php?' . http_build_query([
-          'action'   => 'dia_ipg_action',
-          'do'       => $act,
-          'ip'       => $ip,
+          'action' => 'dia_ipg_action',
+          'do' => $act,
+          'ip' => $ip,
           '_wpnonce' => wp_create_nonce('dia_ipg_nonce'),
         ]));
 
-        $u  = (string) ($r['url'] ?? '');
+        $u = (string) ($r['url'] ?? '');
         $ua = (string) ($r['user_agent'] ?? '');
 
         echo '<tr>';
@@ -433,7 +665,8 @@ class DIA_IPG_Table {
         echo '</td>';
         echo '<td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;">' . esc_html($ua) . '</td>';
         echo '<td>';
-        if ($ip) echo '<a class="' . esc_attr($class) . '" href="' . esc_url($action_url) . '">' . esc_html($label) . '</a>';
+        if ($ip)
+          echo '<a class="' . esc_attr($class) . '" href="' . esc_url($action_url) . '">' . esc_html($label) . '</a>';
         echo '</td>';
         echo '</tr>';
       }

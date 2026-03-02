@@ -118,7 +118,8 @@ class DIA_IPG_Ajax {
       $data = DIA_IPG_Logger::recent_visits_paged($page, $per_page, $recent_hours, $order);
 
       DIA_IPG_Table::render_recent_table([
-        'title'        => 'Recent Visitor Activity — Full URLs & Browser Info',
+        'title'        => 'recent visitor activity — full URLs & browser info
+',
         'rows'         => $data['rows'],
         'total'        => $data['total'],
         'page'         => $page,
