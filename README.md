@@ -1,53 +1,100 @@
-# DIA IP Guardian
+DIA IP Guardian
 
-**DIA IP Guardian** is a minimal, developer-friendly WordPress plugin that logs visitor IP activity and lets you block suspicious traffic — without external analytics, SaaS dashboards, or bloated security suites.
+DIA IP Guardian is a minimal, developer-focused WordPress plugin that logs visitor IP activity and helps you detect, investigate, and block suspicious traffic — without external analytics, SaaS dashboards, or bloated security suites.
 
-Built for devs and site owners who want **simple, local visibility** right inside wp-admin.
+Built for developers and site owners who want simple, local infrastructure visibility directly inside wp-admin.
 
----
 
 ## ✨ Features
 
-- ✅ Logs visitor **IP + time + URL + user agent**
-- ✅ **Top IPs** tables: last **24 hours / 3 days / 7 days**
-- ✅ **Recent visitor activity** table (full URL + browser info)
-- ✅ One-click **Block / Unblock**
-- ✅ Works behind **Cloudflare** and **proxies**
-- ✅ Optional **country detection + flags**
-  - Cloudflare header (fast)
-  - MaxMind mmdb (local + private)
-  - Remote vendor fallback (admin-only, cached)
-- ✅ **Country dropdown filter** (shows only countries you actually got hits from)
-- ✅ AJAX sorting / pagination / rows-per-page **without reloading the whole page**
-- ✅ Automatic log cleanup (configurable retention)
-- ✅ No frontend scripts, no trackers
+Logs visitor IP + time + URL + user agent
 
----
+Top IPs tables:
+
+Last 24 hours
+
+Last 3 days
+
+Last 7 days
+
+Recent visitor activity table (full URL + browser info)
+
+Built-in IP search
+
+Country dropdown filter (shows only countries you actually received traffic from)
+
+Optional country detection + flags
+
+Cloudflare header
+
+MaxMind mmdb (local)
+
+Remote vendor fallback (admin-only, cached)
+
+Notes tab — attach comments to specific IPs (e.g. “Googlebot”, “Payment webhook”, “Suspicious scraper”)
+
+One-click Block / Unblock
+
+Export Top IPs as CSV
+
+Print / Save as PDF
+
+AJAX sorting / filtering / pagination (no full page reload)
+
+Automatic log cleanup (configurable retention)
+
+No frontend scripts, no trackers
+
+----
 
 ## 🎯 Why this plugin exists
 
-Most analytics plugins focus on marketing and hide raw IP-level visibility.
+Most analytics plugins focus on marketing metrics and hide raw IP-level visibility.
 
 DIA IP Guardian focuses on infrastructure visibility:
 
-- Identify suspicious crawlers & scrapers
-- Detect spam traffic patterns
-- Monitor unusual spikes
-- Quickly block abusive IPs
+Identify suspicious crawlers & scrapers
+
+Detect spam traffic patterns
+
+Monitor unusual spikes
+
+Track repeated hits from a single IP
+
+Quickly block abusive IPs
+
+Attach internal notes to IPs for investigation
 
 All directly from the WordPress dashboard.
 
----
+----
 
-## ⚡ Lightweight by design
+## 🧠 Traffic Behavior Guidance
 
-- No external analytics
-- No SaaS dependencies
-- Minimal database footprint (dedicated table + indexes)
-- No frontend JS/CSS
-- Runs only inside WordPress
+The plugin includes a simple guideline table to help interpret traffic behavior:
 
----
+Hits from 1 IP (24h)	Interpretation
+1–50	Normal visitor activity
+50–150	Probably a crawler or heavy user
+150–500	Worth investigating
+500–1000+	Likely automated bot
+2000+	Very suspicious — possible attack
+
+These numbers help you understand the nature of your traffic — not every high number is malicious (search engines can generate heavy traffic).
+
+Always review:
+
+IP
+
+URL patterns
+
+User agent
+
+Country (if available)
+
+before blocking.
+
+----
 
 ## 🧭 Geo / Country Flags (optional)
 
@@ -55,75 +102,118 @@ Country flags are shown in admin tables when country can be resolved.
 
 Supported modes:
 
-- **Auto** (recommended): Cloudflare → MaxMind → Remote (if enabled)
-- **Cloudflare only**: uses `HTTP_CF_IPCOUNTRY` (works only for current requests)
-- **MaxMind**: local GeoLite2 mmdb (fast + private, needs setup)
-- **Remote API (admin-only)**: optional fallback, cached to reduce calls
-- **Off**: disables country lookup
+Auto (recommended): Cloudflare → MaxMind → Remote (if enabled)
 
-> Remote geo lookups are **admin-only** to avoid slowing down visitors.
+Cloudflare only: Uses HTTP_CF_IPCOUNTRY
 
----
+MaxMind: Local GeoLite2 mmdb (fast + private)
 
-## 🔧 Configuration
+Remote API (admin-only): Optional fallback, cached
 
-Inside **IP Guardian → Settings**:
+Off: Disables country lookup
 
-### IP Source
-- Auto (CF → XFF → REMOTE_ADDR)
-- Cloudflare (`HTTP_CF_CONNECTING_IP`)
-- Proxy (`X-Forwarded-For`)
-- Direct (`REMOTE_ADDR`)
+Remote geo lookups are admin-only to avoid slowing down visitors.
 
-### Retention
-- Configure how many days logs are kept (auto cleanup).
+----
 
-### Geo Detection
-- Auto / Off / Cloudflare-only / MaxMind / Remote API
-- Enable/disable remote lookups + choose vendor
-- Optional MaxMind mmdb file path
+## 📝 Notes Tab
 
----
+The Notes tab allows you to attach comments to specific IP addresses.
+
+Example use cases:
+
+Mark known bots (Googlebot, Bingbot)
+
+Identify payment provider callbacks
+
+Flag suspicious scrapers
+
+Mark your office / home IP
+
+Keep investigation context for recurring traffic
+
+Notes are stored locally in WordPress and can be edited or deleted at any time.
+
+----
+
+## ⚡ Lightweight by design
+
+No external analytics
+
+No SaaS dependencies
+
+Minimal database footprint (dedicated log table)
+
+Notes stored in WordPress options
+
+No frontend JS/CSS
+
+Runs only inside wp-admin
+
+Designed for performance and clarity
+
+----
 
 ## 🛠 Use cases
 
-- Developers debugging suspicious traffic
-- WooCommerce stores monitoring bots and scraping
-- Sites behind Cloudflare needing real IP visibility
-- Minimal security setups without heavy plugins
+Developers debugging suspicious traffic
 
----
+WooCommerce stores monitoring bots & scraping
 
-## 🧠 Technical notes
+Sites behind Cloudflare needing real IP visibility
 
-- Logs are stored locally in a dedicated table:
-  - `ip`, `country`, `url`, `user_agent`, `created_at`
-  - Indexed for fast queries (IP+date, country+date, etc.)
-- Cleanup runs via WP Cron (and can be triggered manually in Settings)
-- Admin tables support AJAX pagination/sorting
+Minimal security setups without heavy plugins
 
----
+Technical site owners who want raw access-level visibility
 
-## 🔒 Privacy note
+----
+
+## 🧠 Technical Notes
+
+Logs stored locally in a dedicated table:
+
+ip
+
+country
+
+url
+
+user_agent
+
+created_at
+
+Indexed for fast IP + date queries
+
+Cleanup runs via WP Cron
+
+Admin tables support AJAX pagination, sorting, filtering & searching
+
+Export supports full-range CSV (not limited to visible page)
+
+----
+
+## 🔒 Privacy Note
 
 IP addresses may be considered personal data in some regions (e.g., GDPR).
 
 If you use this plugin in production, mention IP logging in your Privacy Policy:
-- what is collected (IP, URL, user agent, time)
-- why (security, abuse prevention)
-- how long it’s stored (retention days)
 
-You are responsible for compliance with local laws.
+What is collected (IP, URL, user agent, time)
 
----
+Why it is collected (security, abuse prevention)
+
+How long it is stored (retention setting)
+
+You are responsible for compliance with applicable data protection laws.
+
+----
 
 ## 📌 Status
 
-**Early but stable.**  
-Built as a small internal tool and shared publicly for developers who want a clean, minimal solution.
+Stable and actively evolving.
+Originally built as a lightweight internal tool and now shared publicly for developers who want a clean, minimal IP monitoring solution.
 
----
-
+----
 ## 📷 Screenshots
 
 ### Overview – Top IPs
