@@ -1,5 +1,6 @@
 <?php
-if (!defined('ABSPATH')) exit;
+if (!defined('ABSPATH'))
+  exit;
 
 class DIA_IPG_Logger
 {
@@ -41,70 +42,84 @@ class DIA_IPG_Logger
 
   public static function get_client_ip(): string
   {
-    $cfg    = DIA_IPG_Core::cfg();
-    $source = (string)($cfg['ip_source'] ?? 'auto');
+    $cfg = DIA_IPG_Core::cfg();
+    $source = (string) ($cfg['ip_source'] ?? 'auto');
 
-    $remote = isset($_SERVER['REMOTE_ADDR']) ? trim((string)$_SERVER['REMOTE_ADDR']) : '';
-    $cf     = isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? trim((string)$_SERVER['HTTP_CF_CONNECTING_IP']) : '';
-    $xff    = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? trim((string)$_SERVER['HTTP_X_FORWARDED_FOR']) : '';
+    $remote = isset($_SERVER['REMOTE_ADDR']) ? trim((string) $_SERVER['REMOTE_ADDR']) : '';
+    $cf = isset($_SERVER['HTTP_CF_CONNECTING_IP']) ? trim((string) $_SERVER['HTTP_CF_CONNECTING_IP']) : '';
+    $xff = isset($_SERVER['HTTP_X_FORWARDED_FOR']) ? trim((string) $_SERVER['HTTP_X_FORWARDED_FOR']) : '';
 
     $first_from_xff = function ($v) {
-      $parts = array_map('trim', explode(',', (string)$v));
+      $parts = array_map('trim', explode(',', (string) $v));
       foreach ($parts as $p) {
-        if (filter_var($p, FILTER_VALIDATE_IP)) return $p;
+        if (filter_var($p, FILTER_VALIDATE_IP))
+          return $p;
       }
       return '';
     };
 
-    if ($source === 'remote_addr')      $ip = $remote;
-    elseif ($source === 'cf')           $ip = $cf ?: $remote;
-    elseif ($source === 'xff')          $ip = $first_from_xff($xff) ?: $remote;
-    else                                $ip = $cf ?: ($first_from_xff($xff) ?: $remote);
+    if ($source === 'remote_addr')
+      $ip = $remote;
+    elseif ($source === 'cf')
+      $ip = $cf ?: $remote;
+    elseif ($source === 'xff')
+      $ip = $first_from_xff($xff) ?: $remote;
+    else
+      $ip = $cf ?: ($first_from_xff($xff) ?: $remote);
 
     return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '';
   }
 
   public static function track_visit()
   {
-    if (is_admin()) return;
+    if (is_admin())
+      return;
 
     $cfg = DIA_IPG_Core::cfg();
 
-    if (!empty($cfg['ignore_admins']) && DIA_IPG_Core::is_admin_user()) return;
-    if (empty($cfg['track_logged_in']) && is_user_logged_in()) return;
+    if (!empty($cfg['ignore_admins']) && DIA_IPG_Core::is_admin_user())
+      return;
+    if (empty($cfg['track_logged_in']) && is_user_logged_in())
+      return;
 
     $ip = self::get_client_ip();
-    if (!$ip) return;
+    if (!$ip)
+      return;
 
     $blocked = DIA_IPG_Core::blocked_list();
-    if (is_array($blocked) && in_array($ip, $blocked, true)) return;
+    if (is_array($blocked) && in_array($ip, $blocked, true))
+      return;
 
-    $uri = isset($_SERVER['REQUEST_URI']) ? (string)$_SERVER['REQUEST_URI'] : '';
-    if (stripos($uri, '/wp-json/') === 0) return;
-    if (stripos($uri, '/wp-admin/') === 0) return;
-    if (stripos($uri, 'admin-ajax.php') !== false) return;
+    $uri = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '';
+    if (stripos($uri, '/wp-json/') === 0)
+      return;
+    if (stripos($uri, '/wp-admin/') === 0)
+      return;
+    if (stripos($uri, 'admin-ajax.php') !== false)
+      return;
 
     $uri = wp_unslash($uri);
     $url = home_url($uri);
-    $ua  = isset($_SERVER['HTTP_USER_AGENT']) ? substr((string)$_SERVER['HTTP_USER_AGENT'], 0, 255) : '';
+    $ua = isset($_SERVER['HTTP_USER_AGENT']) ? substr((string) $_SERVER['HTTP_USER_AGENT'], 0, 255) : '';
 
     // Throttle: same IP+URL once per 60 sec
     $key = 'dia_ipg_' . md5($ip . '|' . $uri);
-    if (get_transient($key)) return;
+    if (get_transient($key))
+      return;
     set_transient($key, 1, 60);
 
     // Country: fast headers only (Cloudflare). Remote lookups are admin-only.
     $country = DIA_IPG_Geo::country_from_fast_headers();
-    $country = $country ? strtoupper((string)$country) : '';
+    $country = $country ? strtoupper((string) $country) : '';
 
     global $wpdb;
     $wpdb->insert(
       self::table_name(),
       [
-        'ip'         => $ip,
-        'country'    => $country ?: null,
+        'ip' => $ip,
+        'country' => $country ?: null,
         'user_agent' => $ua,
-        'url'        => $url,
+        'url' => $url,
         'created_at' => current_time('mysql'),
       ],
       ['%s', '%s', '%s', '%s', '%s']
@@ -113,8 +128,8 @@ class DIA_IPG_Logger
 
   public static function cleanup_logs()
   {
-    $cfg  = DIA_IPG_Core::cfg();
-    $days = max(1, (int)($cfg['retention_days'] ?? 30));
+    $cfg = DIA_IPG_Core::cfg();
+    $days = max(1, (int) ($cfg['retention_days'] ?? 30));
 
     global $wpdb;
     $wpdb->query(
@@ -128,65 +143,80 @@ class DIA_IPG_Logger
   /**
    * AJAX pagination for Top IP tables (+ optional country filter)
    */
-  public static function top_ips_paged(
-    int $hours,
-    int $page,
-    int $per_page,
-    string $orderby,
-    string $order,
-    string $country = ''
-  ): array {
-    global $wpdb;
+public static function top_ips_paged($hours, $page, $per_page, $orderby, $order, $country = '', $ip_search = ''): array
+{
+  global $wpdb;
 
-    $hours = max(1, (int)$hours);
-    $page  = max(1, (int)$page);
+  $hours = max(1, (int) $hours);
+  $page  = max(1, (int) $page);
 
-    $allowed_pp = [20, 50, 100, 500];
-    $per_page = (int)$per_page;
-    if (!in_array($per_page, $allowed_pp, true)) $per_page = 50;
+  // Keep your UI limits (20/50/100/500). Export should bypass this by calling a different method or passing 5000 via a dedicated export query.
+  $allowed_pp = [20, 50, 100, 500];
+  $per_page = (int) $per_page;
+  if (!in_array($per_page, $allowed_pp, true)) $per_page = 50;
 
-    $offset = ($page - 1) * $per_page;
+  $offset = ($page - 1) * $per_page;
 
-    if (!in_array($orderby, ['hits', 'last_seen'], true)) $orderby = 'hits';
-    $order = strtoupper((string)$order);
-    if (!in_array($order, ['ASC', 'DESC'], true)) $order = 'DESC';
+  if (!in_array($orderby, ['hits', 'last_seen'], true)) $orderby = 'hits';
+  $order = strtoupper((string) $order);
+  if (!in_array($order, ['ASC', 'DESC'], true)) $order = 'DESC';
 
-    $country = strtoupper(trim((string)$country));
-    if ($country !== '' && !preg_match('/^[A-Z]{2}$/', $country)) $country = '';
+  // Normalize country (UK -> GB)
+  $country = strtoupper(trim((string) $country));
+  if ($country === 'UK') $country = 'GB';
+  if ($country !== '' && !preg_match('/^[A-Z]{2}$/', $country)) $country = '';
 
-    $where  = "WHERE created_at >= (NOW() - INTERVAL %d HOUR)";
-    $params = [$hours];
+  // Sanitize search (partial IP allowed)
+  $ip_search = trim((string) $ip_search);
+  $ip_search = preg_replace('/[^0-9a-fA-F\.\:\s]/', '', $ip_search);
+  $ip_search = trim($ip_search);
 
-    if ($country !== '') {
+  $where  = "WHERE created_at >= (NOW() - INTERVAL %d HOUR)";
+  $params = [$hours];
+
+  // Country filter (handle old stored 'UK' too)
+  if ($country !== '') {
+    if ($country === 'GB') {
+      $where .= " AND country IN (%s, %s)";
+      $params[] = 'GB';
+      $params[] = 'UK';
+    } else {
       $where .= " AND country = %s";
       $params[] = $country;
     }
-
-    // total
-    $total_sql = "SELECT COUNT(DISTINCT ip) FROM " . self::table_name() . " {$where}";
-    $total = (int)$wpdb->get_var($wpdb->prepare($total_sql, ...$params));
-
-    $order_sql = ($orderby === 'hits') ? "hits {$order}" : "last_seen {$order}";
-
-    $rows_sql = "SELECT ip,
-                        COUNT(*) AS hits,
-                        MAX(created_at) AS last_seen,
-                        MAX(country) AS country
-                 FROM " . self::table_name() . "
-                 {$where}
-                 GROUP BY ip
-                 ORDER BY {$order_sql}
-                 LIMIT %d OFFSET %d";
-
-    $rows_params = array_merge($params, [$per_page, $offset]);
-
-    $rows = $wpdb->get_results($wpdb->prepare($rows_sql, ...$rows_params), ARRAY_A);
-
-    return [
-      'rows'  => is_array($rows) ? $rows : [],
-      'total' => $total,
-    ];
   }
+
+  // IP search filter
+  if ($ip_search !== '') {
+    $like = '%' . $wpdb->esc_like($ip_search) . '%';
+    $where .= " AND ip LIKE %s";
+    $params[] = $like;
+  }
+
+  // Total (must include all filters!)
+  $total_sql = "SELECT COUNT(DISTINCT ip) FROM " . self::table_name() . " {$where}";
+  $total = (int) $wpdb->get_var($wpdb->prepare($total_sql, ...$params));
+
+  $order_sql = ($orderby === 'hits') ? "hits {$order}" : "last_seen {$order}";
+
+  $rows_sql = "SELECT ip,
+                      COUNT(*) AS hits,
+                      MAX(created_at) AS last_seen,
+                      MAX(country) AS country
+               FROM " . self::table_name() . "
+               {$where}
+               GROUP BY ip
+               ORDER BY {$order_sql}
+               LIMIT %d OFFSET %d";
+
+  $rows_params = array_merge($params, [$per_page, $offset]);
+  $rows = $wpdb->get_results($wpdb->prepare($rows_sql, ...$rows_params), ARRAY_A);
+
+  return [
+    'rows'  => is_array($rows) ? $rows : [],
+    'total' => $total,
+  ];
+}
 
   /**
    * Distinct country list for Top range dropdown (uses stored country column)
@@ -195,7 +225,7 @@ class DIA_IPG_Logger
   {
     global $wpdb;
 
-    $hours = max(1, (int)$hours);
+    $hours = max(1, (int) $hours);
 
     $rows = $wpdb->get_col(
       $wpdb->prepare(
@@ -210,9 +240,10 @@ class DIA_IPG_Logger
     );
 
     $out = [];
-    foreach ((array)$rows as $cc) {
-      $cc = strtoupper(trim((string)$cc));
-      if (preg_match('/^[A-Z]{2}$/', $cc) && $cc !== 'XX') $out[] = $cc;
+    foreach ((array) $rows as $cc) {
+      $cc = strtoupper(trim((string) $cc));
+      if (preg_match('/^[A-Z]{2}$/', $cc) && $cc !== 'XX')
+        $out[] = $cc;
     }
 
     return array_values(array_unique($out));
@@ -225,19 +256,21 @@ class DIA_IPG_Logger
   {
     global $wpdb;
 
-    $page = max(1, (int)$page);
+    $page = max(1, (int) $page);
 
     $allowed_pp = [20, 50, 100, 500];
-    $per_page = (int)$per_page;
-    if (!in_array($per_page, $allowed_pp, true)) $per_page = 50;
+    $per_page = (int) $per_page;
+    if (!in_array($per_page, $allowed_pp, true))
+      $per_page = 50;
 
     $offset = ($page - 1) * $per_page;
 
-    $hours = max(0, (int)$hours);
-    $order = strtoupper((string)$order);
-    if (!in_array($order, ['ASC', 'DESC'], true)) $order = 'DESC';
+    $hours = max(0, (int) $hours);
+    $order = strtoupper((string) $order);
+    if (!in_array($order, ['ASC', 'DESC'], true))
+      $order = 'DESC';
 
-    $where  = '';
+    $where = '';
     $params = [];
 
     if ($hours > 0) {
@@ -247,12 +280,12 @@ class DIA_IPG_Logger
 
     // total
     if ($hours > 0) {
-      $total = (int)$wpdb->get_var($wpdb->prepare(
+      $total = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM " . self::table_name() . " {$where}",
         $params[0]
       ));
     } else {
-      $total = (int)$wpdb->get_var("SELECT COUNT(*) FROM " . self::table_name());
+      $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM " . self::table_name());
     }
 
     $sql = "SELECT id, ip, country, created_at, url, user_agent
@@ -268,7 +301,7 @@ class DIA_IPG_Logger
     }
 
     return [
-      'rows'  => is_array($rows) ? $rows : [],
+      'rows' => is_array($rows) ? $rows : [],
       'total' => $total,
     ];
   }

@@ -2,6 +2,164 @@
   // -----------------------
   // Helpers: loading hint
   // -----------------------
+  // ✅ ADD THESE FUNCTIONS + EVENTS INSIDE YOUR SAME IIFE
+// Put this block near your other helpers (after postTable / before Events is fine).
+
+// -----------------------
+// Notes AJAX (new tab)
+// -----------------------
+async function postNotes(action, payload = {}) {
+  if (typeof IPG_AJAX === "undefined" || !IPG_AJAX.ajaxUrl || !IPG_AJAX.nonce) {
+    console.error("[IPG] IPG_AJAX missing.");
+    return null;
+  }
+
+  const body = new URLSearchParams();
+  body.set("action", action);
+  body.set("nonce", IPG_AJAX.nonce);
+
+  Object.keys(payload).forEach((k) => {
+    if (payload[k] !== undefined && payload[k] !== null) {
+      body.set(k, String(payload[k]));
+    }
+  });
+
+  let res;
+  try {
+    res = await fetch(IPG_AJAX.ajaxUrl, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
+      body: body.toString(),
+    });
+  } catch (err) {
+    console.error("[IPG] Notes fetch failed:", err);
+    return null;
+  }
+
+  const json = await res.json().catch(() => null);
+  if (!json || !json.success) {
+    console.error("[IPG] Notes AJAX error:", json?.data || json);
+    return null;
+  }
+
+  return json.data || null;
+}
+
+function getNotesWrap() {
+  return document.getElementById("ipg-notes-wrap");
+}
+
+async function loadNotes() {
+  const wrap = getNotesWrap();
+  if (!wrap) return;
+
+  wrap.style.opacity = "0.6";
+  const data = await postNotes("dia_ipg_notes_list");
+  wrap.style.opacity = "1";
+
+  if (data && data.html) wrap.innerHTML = data.html;
+}
+
+async function saveNote(ip, comment) {
+  const wrap = getNotesWrap();
+  if (wrap) wrap.style.opacity = "0.6";
+
+  const data = await postNotes("dia_ipg_notes_save", { ip, comment });
+
+  if (wrap) wrap.style.opacity = "1";
+  if (data && data.html && wrap) wrap.innerHTML = data.html;
+}
+
+async function deleteNote(ip) {
+  const wrap = getNotesWrap();
+  if (wrap) wrap.style.opacity = "0.6";
+
+  const data = await postNotes("dia_ipg_notes_delete", { ip });
+
+  if (wrap) wrap.style.opacity = "1";
+  if (data && data.html && wrap) wrap.innerHTML = data.html;
+}
+
+// -----------------------
+// Notes events
+// -----------------------
+
+// ✅ Auto-load notes when Notes tab is open
+document.addEventListener("DOMContentLoaded", function () {
+  if (document.body.classList.contains("wp-admin")) {
+    // If the wrapper exists, we are on Notes tab
+    if (getNotesWrap()) loadNotes();
+  }
+});
+
+// ✅ Notes button actions (save/edit/delete)
+document.addEventListener("click", function (e) {
+  // Save (from form)
+  const saveBtn = e.target.closest(".ipg-note-save");
+  if (saveBtn) {
+    e.preventDefault();
+
+    const ipInput = document.querySelector("#ipg-note-ip");
+    const txt = document.querySelector("#ipg-note-comment");
+
+    const ip = ipInput ? (ipInput.value || "").trim() : "";
+    const comment = txt ? (txt.value || "").trim() : "";
+
+    if (!ip) return alert("Enter an IP.");
+    if (!comment) return alert("Enter a comment.");
+
+    saveNote(ip, comment).then(() => {
+      // optional: clear form after save
+      if (txt) txt.value = "";
+      if (ipInput) ipInput.value = "";
+    });
+
+    return;
+  }
+
+  // Edit -> fill form with existing values
+  const editBtn = e.target.closest(".ipg-note-edit");
+  if (editBtn) {
+    e.preventDefault();
+
+    const ip = (editBtn.dataset.ip || "").trim();
+    const comment = (editBtn.dataset.comment || "").trim();
+
+    const ipInput = document.querySelector("#ipg-note-ip");
+    const txt = document.querySelector("#ipg-note-comment");
+
+    if (ipInput) ipInput.value = ip;
+    if (txt) txt.value = comment;
+
+    // Nice UX: focus textarea
+    if (txt) txt.focus();
+
+    return;
+  }
+
+  // Delete
+  const delBtn = e.target.closest(".ipg-note-delete");
+  if (delBtn) {
+    e.preventDefault();
+
+    const ip = (delBtn.dataset.ip || "").trim();
+    if (!ip) return;
+
+    if (!confirm("Delete this note?")) return;
+
+    deleteNote(ip);
+    return;
+  }
+});
+
+  function debounce(fn, wait) {
+    let t;
+    return (...args) => {
+      clearTimeout(t);
+      t = setTimeout(() => fn(...args), wait);
+    };
+  }
   function ensureTopLoadingUI() {
     const sel = document.getElementById("ipg_top_range");
     if (!sel) return { sel: null, tip: null };
@@ -52,8 +210,14 @@
   // AJAX
   // -----------------------
   async function postTable(payload) {
-    if (typeof IPG_AJAX === "undefined" || !IPG_AJAX.ajaxUrl || !IPG_AJAX.nonce) {
-      console.error("[IPG] IPG_AJAX is missing. admin.js is loaded but wp_localize_script did not run.");
+    if (
+      typeof IPG_AJAX === "undefined" ||
+      !IPG_AJAX.ajaxUrl ||
+      !IPG_AJAX.nonce
+    ) {
+      console.error(
+        "[IPG] IPG_AJAX is missing. admin.js is loaded but wp_localize_script did not run.",
+      );
       return null;
     }
 
@@ -72,8 +236,10 @@
       res = await fetch(IPG_AJAX.ajaxUrl, {
         method: "POST",
         credentials: "same-origin",
-        headers: { "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8" },
-        body: body.toString()
+        headers: {
+          "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+        body: body.toString(),
       });
     } catch (err) {
       console.error("[IPG] Fetch failed:", err);
@@ -100,7 +266,9 @@
   }
 
   function getWrap(tableKey) {
-    return document.querySelector(`.ipg-table-wrap[data-ipg-table="${tableKey}"]`);
+    return document.querySelector(
+      `.ipg-table-wrap[data-ipg-table="${tableKey}"]`,
+    );
   }
 
   function isTopTableKey(key) {
@@ -112,7 +280,13 @@
     const val = sel ? sel.value : "top24";
     return isTopTableKey(val) ? val : "top24";
   }
-
+  function getTopSearchInput() {
+    return document.querySelector(".ipg-ip-search");
+  }
+  function getTopSearchValue() {
+    const input = getTopSearchInput();
+    return input ? (input.value || "").trim() : "";
+  }
   // -----------------------
   // Load single table wrap
   // -----------------------
@@ -123,11 +297,13 @@
     const state = {
       table: tableKey,
       page: overrides.page ?? parseInt(wrap.dataset.page || "1", 10),
-      per_page: overrides.per_page ?? parseInt(wrap.dataset.perPage || "50", 10),
+      per_page:
+        overrides.per_page ?? parseInt(wrap.dataset.perPage || "50", 10),
       orderby: overrides.orderby ?? (wrap.dataset.orderby || ""),
       order: overrides.order ?? (wrap.dataset.order || "DESC"),
       recent_hours: parseInt(wrap.dataset.recentHours || "24", 10),
-      country: overrides.country ?? (wrap.dataset.country || "")
+      country: overrides.country ?? (wrap.dataset.country || ""),
+      ip_search: overrides.ip_search ?? (wrap.dataset.ipSearch || ""),
     };
 
     wrap.style.opacity = "0.55";
@@ -139,7 +315,8 @@
       orderby: state.orderby,
       order: state.order,
       country: state.country || "",
-      ...(state.table === "recent" ? { recent_hours: state.recent_hours } : {})
+      ip_search: state.ip_search || "",
+      ...(state.table === "recent" ? { recent_hours: state.recent_hours } : {}),
     });
 
     wrap.style.opacity = "1";
@@ -161,6 +338,12 @@
     topRangeLoading = true;
 
     const country = overrides.country ?? (container.dataset.country || "");
+    const ip_search =
+      overrides.ip_search ??
+      (container.dataset.ipSearch || getTopSearchValue() || "");
+
+    const input = getTopSearchInput();
+    if (input) input.value = ip_search;
 
     setTopLoading(true);
     container.style.opacity = "0.55";
@@ -172,7 +355,8 @@
         per_page: overrides.per_page ?? 50,
         orderby: overrides.orderby ?? "hits",
         order: overrides.order ?? "DESC",
-        country: country || ""
+        country: country || "",
+        ip_search: ip_search || "",
       });
 
       container.style.opacity = "1";
@@ -181,7 +365,9 @@
       container.innerHTML = html;
 
       // keep selected country in UI
-      const sel = container.querySelector('.ipg-country-filter[data-table="' + tableKey + '"]');
+      const sel = container.querySelector(
+        '.ipg-country-filter[data-table="' + tableKey + '"]',
+      );
       if (sel) sel.value = country || "";
     } finally {
       setTopLoading(false);
@@ -192,6 +378,20 @@
   // -----------------------
   // Events
   // -----------------------
+  const onSearch = debounce((input) => {
+    const val = (input.value || "").trim();
+    const container = document.getElementById("ipg-top-container");
+    if (container) container.dataset.ipSearch = val;
+
+    // Always search the currently selected top table
+    loadTopRange(currentTopRangeKey(), { ip_search: val, page: 1 });
+  }, 350);
+
+  document.addEventListener("input", function (e) {
+    const ipInput = e.target.closest(".ipg-ip-search");
+    if (!ipInput) return;
+    onSearch(ipInput);
+  });
   document.addEventListener("click", function (e) {
     // ✅ Refresh button
     const refreshBtn = e.target.closest(".ipg-refresh");
@@ -203,7 +403,7 @@
       // Refresh current top range
       if (isTopTableKey(table)) {
         const container = document.getElementById("ipg-top-container");
-        const country = container ? (container.dataset.country || "") : "";
+        const country = container ? container.dataset.country || "" : "";
         loadTopRange(currentTopRangeKey(), { country });
         return;
       }
@@ -219,6 +419,68 @@
 
       return;
     }
+    // ✅ Export CSV / PDF (top tables)
+    const exportCsv = e.target.closest(".ipg-export-csv");
+    if (exportCsv) {
+      e.preventDefault();
+      const container = document.getElementById("ipg-top-container");
+      const table = currentTopRangeKey();
+      const wrap = container
+        ? container.querySelector(`.ipg-table-wrap[data-ipg-table="${table}"]`)
+        : null;
+
+      const country = container ? container.dataset.country || "" : "";
+      const orderby = wrap ? wrap.dataset.orderby || "hits" : "hits";
+      const order = wrap ? wrap.dataset.order || "DESC" : "DESC";
+
+      const url =
+        IPG_AJAX.ajaxUrl +
+        "?action=dia_ipg_export_csv" +
+        "&nonce=" +
+        encodeURIComponent(IPG_AJAX.nonce) +
+        "&table=" +
+        encodeURIComponent(table) +
+        "&country=" +
+        encodeURIComponent(country || "") +
+        "&orderby=" +
+        encodeURIComponent(orderby) +
+        "&order=" +
+        encodeURIComponent(order);
+
+      window.location.href = url; // triggers download
+      return;
+    }
+
+    const exportPdf = e.target.closest(".ipg-export-pdf");
+    if (exportPdf) {
+      e.preventDefault();
+      const container = document.getElementById("ipg-top-container");
+      const table = currentTopRangeKey();
+      const wrap = container
+        ? container.querySelector(`.ipg-table-wrap[data-ipg-table="${table}"]`)
+        : null;
+
+      const country = container ? container.dataset.country || "" : "";
+      const orderby = wrap ? wrap.dataset.orderby || "hits" : "hits";
+      const order = wrap ? wrap.dataset.order || "DESC" : "DESC";
+
+      const url =
+        IPG_AJAX.ajaxUrl +
+        "?action=dia_ipg_export_print" +
+        "&nonce=" +
+        encodeURIComponent(IPG_AJAX.nonce) +
+        "&table=" +
+        encodeURIComponent(table) +
+        "&country=" +
+        encodeURIComponent(country || "") +
+        "&orderby=" +
+        encodeURIComponent(orderby) +
+        "&order=" +
+        encodeURIComponent(order);
+
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
 
     // Sort
     const sort = e.target.closest(".ipg-sort");
@@ -230,12 +492,12 @@
       // ✅ Top tables must refresh via container swap
       if (isTopTableKey(table)) {
         const container = document.getElementById("ipg-top-container");
-        const country = container ? (container.dataset.country || "") : "";
+        const country = container ? container.dataset.country || "" : "";
         loadTopRange(currentTopRangeKey(), {
           page: 1,
           orderby: sort.dataset.orderby,
           order: sort.dataset.order,
-          country
+          country,
         });
         return;
       }
@@ -244,7 +506,7 @@
       loadTable(table, {
         page: 1,
         orderby: sort.dataset.orderby,
-        order: sort.dataset.order
+        order: sort.dataset.order,
       });
       return;
     }
@@ -261,8 +523,12 @@
       // ✅ Top tables pagination via container swap
       if (isTopTableKey(table)) {
         const container = document.getElementById("ipg-top-container");
-        const country = container ? (container.dataset.country || "") : "";
-        loadTopRange(currentTopRangeKey(), { page, country });
+        const country = container ? container.dataset.country || "" : "";
+        loadTopRange(currentTopRangeKey(), {
+          page,
+          country,
+          ip_search: getTopSearchValue(),
+        });
         return;
       }
 
@@ -280,8 +546,12 @@
 
       if (isTopTableKey(table)) {
         const container = document.getElementById("ipg-top-container");
-        const country = container ? (container.dataset.country || "") : "";
-        loadTopRange(currentTopRangeKey(), { per_page: perPage, page: 1, country });
+        const country = container ? container.dataset.country || "" : "";
+        loadTopRange(currentTopRangeKey(), {
+          per_page: perPage,
+          page: 1,
+          country,
+        });
         return;
       }
 
@@ -298,7 +568,11 @@
       if (isTopTableKey(table)) {
         const container = document.getElementById("ipg-top-container");
         if (container) container.dataset.country = country;
-        loadTopRange(currentTopRangeKey(), { country, page: 1 });
+        loadTopRange(currentTopRangeKey(), {
+          country,
+          ip_search: getTopSearchValue(),
+          page: 1,
+        });
         return;
       }
 
@@ -313,8 +587,8 @@
 
       if (isTopTableKey(val)) {
         const container = document.getElementById("ipg-top-container");
-        const country = container ? (container.dataset.country || "") : "";
-        loadTopRange(val, { country, page: 1 });
+        const country = container ? container.dataset.country || "" : "";
+        loadTopRange(val, { country, ip_search: getTopSearchValue(), page: 1 });
       } else {
         console.warn("[IPG] Unknown top range:", val);
       }
@@ -328,7 +602,10 @@
     const container = document.getElementById("ipg-top-container");
     if (container) {
       const country = container.dataset.country || "";
-      loadTopRange(currentTopRangeKey(), { country });
+      loadTopRange(currentTopRangeKey(), {
+        country,
+        ip_search: getTopSearchValue(),
+      });
     }
   });
 })();

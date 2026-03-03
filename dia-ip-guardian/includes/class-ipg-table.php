@@ -4,7 +4,17 @@ if (!defined('ABSPATH'))
 
 class DIA_IPG_Table
 {
-
+  public static function export_fmt_dt($mysql_dt): string
+  {
+    return (string) self::fmt_dt($mysql_dt);
+  }
+  private static function sanitize_ip_search(string $s): string
+  {
+    $s = trim($s);
+    // allow partial typing: digits, hex, dot, colon
+    $s = preg_replace('/[^0-9a-fA-F\.\:\s]/', '', $s);
+    return trim($s);
+  }
   /**
    * Format a MySQL DATETIME string for display in WP timezone.
    */
@@ -433,7 +443,7 @@ class DIA_IPG_Table
     $order = (string) ($args['order'] ?? 'DESC');
     $blocked = (array) ($args['blocked'] ?? []);
     $title = (string) ($args['title'] ?? '');
-
+    $ip_search = self::sanitize_ip_search((string) ($args['ip_search'] ?? ''));
     // ✅ normalize filter (fixes UK/GB selection)
     $country_filter = self::normalize_cc((string) ($args['country'] ?? ''));
     if ($country_filter !== '' && !preg_match('/^[A-Z]{2}$/', $country_filter))
@@ -446,6 +456,7 @@ class DIA_IPG_Table
       . ' data-country="' . esc_attr($country_filter) . '"'
       . ' data-orderby="' . esc_attr($orderby) . '"'
       . ' data-order="' . esc_attr($order) . '"'
+      . ' data-ip-search="' . esc_attr($ip_search) . '"'
       . ' data-page="' . esc_attr($page) . '"'
       . ' data-per-page="' . esc_attr($per_page) . '"'
       . '>';
@@ -487,10 +498,17 @@ class DIA_IPG_Table
     echo '</select>';
     echo '</div>';
 
-    // Center: refresh
-    echo '<div style="display:flex;align-items:center;gap:8px;flex:1;justify-content:center;">';
+    // Center: refresh + exports
+    echo '<div style="display:flex;align-items:center;gap:8px;flex:1;justify-content:center;flex-wrap:wrap;">';
+
     echo '<button type="button" class="button ipg-refresh" data-table="' . esc_attr($table_key) . '" title="Refresh table">refresh</button>';
+
+    echo '<button type="button" class="button ipg-export-csv" data-table="' . esc_attr($table_key) . '" title="Export this range to CSV">export CSV</button>';
+
+    echo '<button type="button" class="button ipg-export-pdf" data-table="' . esc_attr($table_key) . '" title="Open printable view (Save as PDF)">save as PDF</button>';
+
     echo '<span class="ipg-refresh-msg" style="display:none;font-size:12px;opacity:.75;">Refreshing…</span>';
+
     echo '</div>';
 
     // Right: per page
