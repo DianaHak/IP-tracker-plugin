@@ -86,18 +86,18 @@ class DIA_IPG_Table
   /**
    * Trustworthy IP info source (ASN, org, prefix, RPKI, etc)
    */
-  private static function whois_url(string $ip): string
-  {
-    return 'https://stat.ripe.net/' . rawurlencode($ip);
-  }
+  // private static function whois_url(string $ip): string
+  // {
+  //   return 'https://stat.ripe.net/' . rawurlencode($ip);
+  // }
 
-  private static function whois_button(string $ip): string
-  {
-    if (!$ip)
-      return '';
-    $url = self::whois_url($ip);
-    return '<a class="button" href="' . esc_url($url) . '" target="_blank" rel="noopener noreferrer">WHOIS</a>';
-  }
+  // private static function whois_button(string $ip): string
+  // {
+  //   if (!$ip)
+  //     return '';
+  //   $url = self::whois_url($ip);
+  //   return '<a class="button" href="' . esc_url($url) . '" target="_blank" rel="noopener noreferrer">WHOIS</a>';
+  // }
 
   private static function pagination($table_key, $page, $per_page, $total)
   {
@@ -499,9 +499,9 @@ class DIA_IPG_Table
     echo '</div>';
 
     // Center: refresh + exports
-    echo '<div style="display:flex;align-items:center;gap:8px;flex:1;justify-content:center;flex-wrap:wrap;">';
+    echo '<div style="display:flex;align-items:center;gap:16px;flex:1;justify-content:center;flex-wrap:wrap;">';
 
-    echo '<button type="button" class="button ipg-refresh" data-table="' . esc_attr($table_key) . '" title="Refresh table">refresh</button>';
+    echo '<button type="button" style="border:1px solid black;color:black" class="button ipg-refresh" data-table="' . esc_attr($table_key) . '" title="Refresh table">refresh</button>';
 
     echo '<button type="button" class="button ipg-export-csv" data-table="' . esc_attr($table_key) . '" title="Export this range to CSV">export CSV</button>';
 
@@ -518,8 +518,10 @@ class DIA_IPG_Table
 
     echo '<table class="widefat striped">';
     echo '<thead><tr>';
+    echo '<th style="width:34px;text-align:center;padding-left:8px;padding-right:8px;">';
+echo '<input type="checkbox" class="ipg-select-all-page" title="select all rows on this page" style="margin:0;" />';
+    echo '</th>';
     echo '<th>IP</th>';
-    echo '<th style="width:90px;">Check</th>';
     echo '<th>';
     self::sort_link($table_key, 'Hits', 'hits', $orderby, $order);
     echo '</th>';
@@ -532,7 +534,7 @@ class DIA_IPG_Table
     echo '<tbody>';
 
     if (empty($rows)) {
-      echo '<tr><td colspan="5">No data yet.</td></tr>';
+      echo '<tr><td colspan="6">No data yet.</td></tr>';
     } else {
       $cc_cache = [];
 
@@ -576,8 +578,10 @@ class DIA_IPG_Table
         ]));
 
         echo '<tr>';
+        echo '<td style="width:34px;text-align:center;padding:6px 8px;vertical-align:middle;">';
+        echo '<input type="checkbox" class="ipg-row-select" value="' . esc_attr($ip) . '" style="margin:0;" />';
+        echo '</td>';
         echo '<td>' . $flag . '<code>' . esc_html($ip) . '</code>' . $suffix . '</td>';
-        echo '<td>' . self::whois_button($ip) . '</td>';
         echo '<td>' . $hits_html . '</td>';
         echo '<td>' . esc_html(self::fmt_dt($last_seen)) . '</td>';
         echo '<td>';
@@ -628,7 +632,6 @@ class DIA_IPG_Table
     );
     echo '</th>';
     echo '<th>IP</th>';
-    echo '<th style="width:90px;">Check</th>';
     echo '<th>URL</th>';
     echo '<th>User Agent</th>';
     echo '<th>Action</th>';
@@ -677,7 +680,6 @@ class DIA_IPG_Table
         echo '<tr>';
         echo '<td>' . esc_html(self::fmt_dt((string) ($r['created_at'] ?? ''))) . '</td>';
         echo '<td>' . $flag . '<code>' . esc_html($ip) . '</code>' . $suffix . '</td>';
-        echo '<td>' . self::whois_button($ip) . '</td>';
         echo '<td style="max-width:520px;overflow:hidden;text-overflow:ellipsis;">';
         echo '<a href="' . esc_url($u) . '" target="_blank" rel="noopener noreferrer">' . esc_html($u) . '</a>';
         echo '</td>';

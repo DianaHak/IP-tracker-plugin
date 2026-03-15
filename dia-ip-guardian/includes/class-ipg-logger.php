@@ -6,6 +6,91 @@ class DIA_IPG_Logger
 {
   const TABLE_LOGS = 'dia_ipg_logs';
 
+  /**
+   * Return UTC datetime string for “now minus N seconds”,
+   * where “now” is based on WordPress website timezone.
+   *
+   * We store created_at in UTC (current_time('mysql', true)),
+   * so all comparisons must be in UTC as well.
+   */
+  private static function wp_cutoff_utc_str(int $seconds_back): string
+  {
+    $seconds_back = max(0, (int) $seconds_back);
+
+    // Website timezone (Settings -> General)
+    $site_tz = function_exists('wp_timezone')
+      ? wp_timezone()
+      : new DateTimeZone(wp_timezone_string());
+
+    // "Now" in site timezone
+    $dt = new DateTime('now', $site_tz);
+    if ($seconds_back > 0) {
+      $dt->modify('-' . $seconds_back . ' seconds');
+    }
+
+    // Convert that site-time cutoff to UTC for DB comparison
+    $dt->setTimezone(new DateTimeZone('UTC'));
+    return $dt->format('Y-m-d H:i:s');
+  }
+  public static function recent_visits_paged_minutes(int $page, int $per_page, int $minutes, string $order): array
+  {
+    global $wpdb;
+
+    $page = max(1, (int) $page);
+
+    $allowed_pp = [20, 50, 100, 500];
+    $per_page = (int) $per_page;
+    if (!in_array($per_page, $allowed_pp, true))
+      $per_page = 50;
+
+    $offset = ($page - 1) * $per_page;
+
+    $minutes = max(0, (int) $minutes);
+
+    $order = strtoupper((string) $order);
+    if (!in_array($order, ['ASC', 'DESC'], true))
+      $order = 'DESC';
+
+    $where = '';
+    $params = [];
+
+    if ($minutes > 0) {
+      // ✅ logs are stored in UTC (current_time('mysql', true)), so cutoff must be UTC too
+      $cutoff_ts = current_time('timestamp', true) - ($minutes * MINUTE_IN_SECONDS);
+      $cutoff_str = gmdate('Y-m-d H:i:s', $cutoff_ts);
+
+      $where = "WHERE created_at >= %s";
+      $params[] = $cutoff_str;
+    }
+
+    // total
+    if ($minutes > 0) {
+      $total = (int) $wpdb->get_var($wpdb->prepare(
+        "SELECT COUNT(*) FROM " . self::table_name() . " {$where}",
+        $params[0]
+      ));
+    } else {
+      $total = (int) $wpdb->get_var("SELECT COUNT(*) FROM " . self::table_name());
+    }
+
+    $sql = "SELECT id, ip, country, created_at, url, user_agent
+          FROM " . self::table_name() . "
+          {$where}
+          ORDER BY created_at {$order}
+          LIMIT %d OFFSET %d";
+
+    if ($minutes > 0) {
+      $rows = $wpdb->get_results($wpdb->prepare($sql, $params[0], $per_page, $offset), ARRAY_A);
+    } else {
+      $rows = $wpdb->get_results($wpdb->prepare($sql, $per_page, $offset), ARRAY_A);
+    }
+
+    return [
+      'rows' => is_array($rows) ? $rows : [],
+      'total' => $total,
+    ];
+  }
+
   public static function init()
   {
     add_action('template_redirect', [__CLASS__, 'track_visit'], 1);
@@ -58,14 +143,15 @@ class DIA_IPG_Logger
       return '';
     };
 
-    if ($source === 'remote_addr')
+    if ($source === 'remote_addr') {
       $ip = $remote;
-    elseif ($source === 'cf')
+    } elseif ($source === 'cf') {
       $ip = $cf ?: $remote;
-    elseif ($source === 'xff')
+    } elseif ($source === 'xff') {
       $ip = $first_from_xff($xff) ?: $remote;
-    else
+    } else {
       $ip = $cf ?: ($first_from_xff($xff) ?: $remote);
+    }
 
     return filter_var($ip, FILTER_VALIDATE_IP) ? $ip : '';
   }
@@ -120,7 +206,8 @@ class DIA_IPG_Logger
         'country' => $country ?: null,
         'user_agent' => $ua,
         'url' => $url,
-        'created_at' => current_time('mysql'),
+        // ✅ store UTC for consistency
+        'created_at' => current_time('mysql', true),
       ],
       ['%s', '%s', '%s', '%s', '%s']
     );
@@ -131,111 +218,200 @@ class DIA_IPG_Logger
     $cfg = DIA_IPG_Core::cfg();
     $days = max(1, (int) ($cfg['retention_days'] ?? 30));
 
+    // ✅ Website-time based cutoff converted to UTC
+    $cutoff_utc = self::wp_cutoff_utc_str($days * DAY_IN_SECONDS);
+
     global $wpdb;
     $wpdb->query(
       $wpdb->prepare(
-        "DELETE FROM " . self::table_name() . " WHERE created_at < (NOW() - INTERVAL %d DAY)",
-        $days
+        "DELETE FROM " . self::table_name() . " WHERE created_at < %s",
+        $cutoff_utc
       )
     );
   }
 
-  /**
-   * AJAX pagination for Top IP tables (+ optional country filter)
-   */
-public static function top_ips_paged($hours, $page, $per_page, $orderby, $order, $country = '', $ip_search = ''): array
-{
-  global $wpdb;
+  /* =========================================================
+   * Top tables (hours-based)
+   * ======================================================= */
 
-  $hours = max(1, (int) $hours);
-  $page  = max(1, (int) $page);
+  public static function top_ips_paged($hours, $page, $per_page, $orderby, $order, $country = '', $ip_search = ''): array
+  {
+    global $wpdb;
 
-  // Keep your UI limits (20/50/100/500). Export should bypass this by calling a different method or passing 5000 via a dedicated export query.
-  $allowed_pp = [20, 50, 100, 500];
-  $per_page = (int) $per_page;
-  if (!in_array($per_page, $allowed_pp, true)) $per_page = 50;
+    $hours = max(1, (int) $hours);
+    $page = max(1, (int) $page);
 
-  $offset = ($page - 1) * $per_page;
+    $allowed_pp = [20, 50, 100, 500];
+    $per_page = (int) $per_page;
+    if (!in_array($per_page, $allowed_pp, true))
+      $per_page = 50;
 
-  if (!in_array($orderby, ['hits', 'last_seen'], true)) $orderby = 'hits';
-  $order = strtoupper((string) $order);
-  if (!in_array($order, ['ASC', 'DESC'], true)) $order = 'DESC';
+    $offset = ($page - 1) * $per_page;
 
-  // Normalize country (UK -> GB)
-  $country = strtoupper(trim((string) $country));
-  if ($country === 'UK') $country = 'GB';
-  if ($country !== '' && !preg_match('/^[A-Z]{2}$/', $country)) $country = '';
+    if (!in_array($orderby, ['hits', 'last_seen'], true))
+      $orderby = 'hits';
+    $order = strtoupper((string) $order);
+    if (!in_array($order, ['ASC', 'DESC'], true))
+      $order = 'DESC';
 
-  // Sanitize search (partial IP allowed)
-  $ip_search = trim((string) $ip_search);
-  $ip_search = preg_replace('/[^0-9a-fA-F\.\:\s]/', '', $ip_search);
-  $ip_search = trim($ip_search);
+    $country = strtoupper(trim((string) $country));
+    if ($country === 'UK')
+      $country = 'GB';
+    if ($country !== '' && !preg_match('/^[A-Z]{2}$/', $country))
+      $country = '';
 
-  $where  = "WHERE created_at >= (NOW() - INTERVAL %d HOUR)";
-  $params = [$hours];
+    $ip_search = trim((string) $ip_search);
+    $ip_search = preg_replace('/[^0-9a-fA-F\.\:\s]/', '', $ip_search);
+    $ip_search = trim($ip_search);
 
-  // Country filter (handle old stored 'UK' too)
-  if ($country !== '') {
-    if ($country === 'GB') {
-      $where .= " AND country IN (%s, %s)";
-      $params[] = 'GB';
-      $params[] = 'UK';
-    } else {
-      $where .= " AND country = %s";
-      $params[] = $country;
+    // ✅ cutoff based on website time, converted to UTC for DB compare
+    $cutoff_str = self::wp_cutoff_utc_str($hours * HOUR_IN_SECONDS);
+
+    $where = "WHERE created_at >= %s";
+    $params = [$cutoff_str];
+
+    if ($country !== '') {
+      if ($country === 'GB') {
+        $where .= " AND country IN (%s, %s)";
+        $params[] = 'GB';
+        $params[] = 'UK';
+      } else {
+        $where .= " AND country = %s";
+        $params[] = $country;
+      }
     }
-  }
 
-  // IP search filter
-  if ($ip_search !== '') {
-    $like = '%' . $wpdb->esc_like($ip_search) . '%';
-    $where .= " AND ip LIKE %s";
-    $params[] = $like;
-  }
+    if ($ip_search !== '') {
+      $like = '%' . $wpdb->esc_like($ip_search) . '%';
+      $where .= " AND ip LIKE %s";
+      $params[] = $like;
+    }
 
-  // Total (must include all filters!)
-  $total_sql = "SELECT COUNT(DISTINCT ip) FROM " . self::table_name() . " {$where}";
-  $total = (int) $wpdb->get_var($wpdb->prepare($total_sql, ...$params));
+    $total_sql = "SELECT COUNT(DISTINCT ip) FROM " . self::table_name() . " {$where}";
+    $total = (int) $wpdb->get_var($wpdb->prepare($total_sql, ...$params));
 
-  $order_sql = ($orderby === 'hits') ? "hits {$order}" : "last_seen {$order}";
+    $order_sql = ($orderby === 'hits') ? "hits {$order}" : "last_seen {$order}";
 
-  $rows_sql = "SELECT ip,
+    $rows_sql = "SELECT ip,
                       COUNT(*) AS hits,
                       MAX(created_at) AS last_seen,
                       MAX(country) AS country
-               FROM " . self::table_name() . "
-               {$where}
-               GROUP BY ip
-               ORDER BY {$order_sql}
-               LIMIT %d OFFSET %d";
+                 FROM " . self::table_name() . "
+                 {$where}
+                 GROUP BY ip
+                 ORDER BY {$order_sql}
+                 LIMIT %d OFFSET %d";
 
-  $rows_params = array_merge($params, [$per_page, $offset]);
-  $rows = $wpdb->get_results($wpdb->prepare($rows_sql, ...$rows_params), ARRAY_A);
+    $rows_params = array_merge($params, [$per_page, $offset]);
+    $rows = $wpdb->get_results($wpdb->prepare($rows_sql, ...$rows_params), ARRAY_A);
 
-  return [
-    'rows'  => is_array($rows) ? $rows : [],
-    'total' => $total,
-  ];
-}
+    return [
+      'rows' => is_array($rows) ? $rows : [],
+      'total' => $total,
+    ];
+  }
 
-  /**
-   * Distinct country list for Top range dropdown (uses stored country column)
-   */
+  /* =========================================================
+   * Top tables (minutes-based)
+   * ======================================================= */
+
+  public static function top_ips_paged_minutes($minutes, $page, $per_page, $orderby, $order, $country = '', $ip_search = ''): array
+  {
+    global $wpdb;
+
+    $minutes = max(1, (int) $minutes);
+    $page = max(1, (int) $page);
+
+    $allowed_pp = [20, 50, 100, 500];
+    $per_page = (int) $per_page;
+    if (!in_array($per_page, $allowed_pp, true))
+      $per_page = 50;
+
+    $offset = ($page - 1) * $per_page;
+
+    if (!in_array($orderby, ['hits', 'last_seen'], true))
+      $orderby = 'hits';
+    $order = strtoupper((string) $order);
+    if (!in_array($order, ['ASC', 'DESC'], true))
+      $order = 'DESC';
+
+    $country = strtoupper(trim((string) $country));
+    if ($country === 'UK')
+      $country = 'GB';
+    if ($country !== '' && !preg_match('/^[A-Z]{2}$/', $country))
+      $country = '';
+
+    $ip_search = trim((string) $ip_search);
+    $ip_search = preg_replace('/[^0-9a-fA-F\.\:\s]/', '', $ip_search);
+    $ip_search = trim($ip_search);
+
+    // ✅ cutoff based on website time, converted to UTC for DB compare
+    $cutoff_str = self::wp_cutoff_utc_str($minutes * MINUTE_IN_SECONDS);
+
+    $where = "WHERE created_at >= %s";
+    $params = [$cutoff_str];
+
+    if ($country !== '') {
+      if ($country === 'GB') {
+        $where .= " AND country IN (%s, %s)";
+        $params[] = 'GB';
+        $params[] = 'UK';
+      } else {
+        $where .= " AND country = %s";
+        $params[] = $country;
+      }
+    }
+
+    if ($ip_search !== '') {
+      $like = '%' . $wpdb->esc_like($ip_search) . '%';
+      $where .= " AND ip LIKE %s";
+      $params[] = $like;
+    }
+
+    $total_sql = "SELECT COUNT(DISTINCT ip) FROM " . self::table_name() . " {$where}";
+    $total = (int) $wpdb->get_var($wpdb->prepare($total_sql, ...$params));
+
+    $order_sql = ($orderby === 'hits') ? "hits {$order}" : "last_seen {$order}";
+
+    $rows_sql = "SELECT ip,
+                      COUNT(*) AS hits,
+                      MAX(created_at) AS last_seen,
+                      MAX(country) AS country
+                 FROM " . self::table_name() . "
+                 {$where}
+                 GROUP BY ip
+                 ORDER BY {$order_sql}
+                 LIMIT %d OFFSET %d";
+
+    $rows_params = array_merge($params, [$per_page, $offset]);
+    $rows = $wpdb->get_results($wpdb->prepare($rows_sql, ...$rows_params), ARRAY_A);
+
+    return [
+      'rows' => is_array($rows) ? $rows : [],
+      'total' => $total,
+    ];
+  }
+
+  /* =========================================================
+   * Countries (hours/minutes)
+   * ======================================================= */
+
   public static function top_countries(int $hours): array
   {
     global $wpdb;
 
     $hours = max(1, (int) $hours);
+    $cutoff_str = self::wp_cutoff_utc_str($hours * HOUR_IN_SECONDS);
 
     $rows = $wpdb->get_col(
       $wpdb->prepare(
         "SELECT DISTINCT country
          FROM " . self::table_name() . "
-         WHERE created_at >= (NOW() - INTERVAL %d HOUR)
+         WHERE created_at >= %s
            AND country IS NOT NULL
            AND country <> ''
          ORDER BY country ASC",
-        $hours
+        $cutoff_str
       )
     );
 
@@ -249,9 +425,39 @@ public static function top_ips_paged($hours, $page, $per_page, $orderby, $order,
     return array_values(array_unique($out));
   }
 
-  /**
-   * AJAX pagination for Recent table
-   */
+  public static function top_countries_minutes(int $minutes): array
+  {
+    global $wpdb;
+
+    $minutes = max(1, (int) $minutes);
+    $cutoff_str = self::wp_cutoff_utc_str($minutes * MINUTE_IN_SECONDS);
+
+    $rows = $wpdb->get_col(
+      $wpdb->prepare(
+        "SELECT DISTINCT country
+         FROM " . self::table_name() . "
+         WHERE created_at >= %s
+           AND country IS NOT NULL
+           AND country <> ''
+         ORDER BY country ASC",
+        $cutoff_str
+      )
+    );
+
+    $out = [];
+    foreach ((array) $rows as $cc) {
+      $cc = strtoupper(trim((string) $cc));
+      if (preg_match('/^[A-Z]{2}$/', $cc) && $cc !== 'XX')
+        $out[] = $cc;
+    }
+
+    return array_values(array_unique($out));
+  }
+
+  /* =========================================================
+   * Recent table
+   * ======================================================= */
+
   public static function recent_visits_paged(int $page, int $per_page, int $hours, string $order): array
   {
     global $wpdb;
@@ -274,11 +480,12 @@ public static function top_ips_paged($hours, $page, $per_page, $orderby, $order,
     $params = [];
 
     if ($hours > 0) {
-      $where = "WHERE created_at >= (NOW() - INTERVAL %d HOUR)";
-      $params[] = $hours;
+      // ✅ website-time based cutoff converted to UTC for DB compare
+      $cutoff_str = self::wp_cutoff_utc_str($hours * HOUR_IN_SECONDS);
+      $where = "WHERE created_at >= %s";
+      $params[] = $cutoff_str;
     }
 
-    // total
     if ($hours > 0) {
       $total = (int) $wpdb->get_var($wpdb->prepare(
         "SELECT COUNT(*) FROM " . self::table_name() . " {$where}",

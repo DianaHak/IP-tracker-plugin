@@ -1,9 +1,12 @@
 <?php
-if (!defined('ABSPATH')) exit;
+if (!defined('ABSPATH'))
+  exit;
 
-class DIA_IPG_Admin {
+class DIA_IPG_Admin
+{
 
-  public static function init() {
+  public static function init()
+  {
     add_action('admin_menu', [__CLASS__, 'menu']);
     add_action('admin_post_dia_ipg_action', [__CLASS__, 'handle_action']);
 
@@ -12,10 +15,11 @@ class DIA_IPG_Admin {
     add_action('admin_post_dia_ipg_clear_logs', [__CLASS__, 'clear_logs']);
   }
 
-  public static function menu() {
+  public static function menu()
+  {
     add_menu_page(
-      'IP Guardian',
-      'IP Guardian',
+      'Zaygl IP blocker and anti-DDoS',
+      'Zaygl IP blocker and anti-DDoS',
       'manage_options',
       'dia-ip-guardian',
       [__CLASS__, 'render'],
@@ -24,27 +28,32 @@ class DIA_IPG_Admin {
     );
   }
 
-  private static function current_tab(): string {
+  private static function current_tab(): string
+  {
     $tab = isset($_GET['tab']) ? sanitize_key((string) $_GET['tab']) : 'overview';
     // ✅ Added notes
     $allowed = ['overview', 'recent', 'notes', 'blocked', 'settings', 'info'];
     return in_array($tab, $allowed, true) ? $tab : 'overview';
   }
 
-  private static function action_url(string $do, string $ip = '', ?string $tab = null): string {
-    if ($tab === null) $tab = self::current_tab();
+  private static function action_url(string $do, string $ip = '', ?string $tab = null): string
+  {
+    if ($tab === null)
+      $tab = self::current_tab();
 
     return admin_url('admin-post.php?' . http_build_query([
-      'action'   => 'dia_ipg_action',
-      'do'       => $do,
-      'ip'       => $ip,
-      'tab'      => $tab,
+      'action' => 'dia_ipg_action',
+      'do' => $do,
+      'ip' => $ip,
+      'tab' => $tab,
       '_wpnonce' => wp_create_nonce('dia_ipg_nonce'),
     ]));
   }
 
-  public static function handle_action() {
-    if (!current_user_can('manage_options')) wp_die('Forbidden');
+  public static function handle_action()
+  {
+    if (!current_user_can('manage_options'))
+      wp_die('Forbidden');
     check_admin_referer('dia_ipg_nonce', '_wpnonce');
 
     $do = isset($_GET['do']) ? sanitize_text_field((string) $_GET['do']) : '';
@@ -63,37 +72,46 @@ class DIA_IPG_Admin {
 
     if ($do === 'save_settings') {
       $new = [
-        'ip_source'       => isset($_POST['ip_source']) ? sanitize_text_field((string) $_POST['ip_source']) : 'auto',
-        'retention_days'  => isset($_POST['retention_days']) ? (int) $_POST['retention_days'] : 30,
-        'ignore_admins'   => !empty($_POST['ignore_admins']) ? 1 : 0,
+        'ip_source' => isset($_POST['ip_source']) ? sanitize_text_field((string) $_POST['ip_source']) : 'auto',
+        'retention_days' => isset($_POST['retention_days']) ? (int) $_POST['retention_days'] : 30,
+        'ignore_admins' => !empty($_POST['ignore_admins']) ? 1 : 0,
         'track_logged_in' => !empty($_POST['track_logged_in']) ? 1 : 0,
 
-        'geo_mode'            => isset($_POST['geo_mode']) ? sanitize_text_field((string) $_POST['geo_mode']) : 'auto',
-        'remote_geo'          => !empty($_POST['remote_geo']) ? 1 : 0,
-        'remote_geo_vendor'   => isset($_POST['remote_geo_vendor']) ? sanitize_text_field((string) $_POST['remote_geo_vendor']) : 'ipapi_co',
-        'maxmind_mmdb_path'   => isset($_POST['maxmind_mmdb_path']) ? sanitize_text_field((string) $_POST['maxmind_mmdb_path']) : '',
+        'geo_mode' => isset($_POST['geo_mode']) ? sanitize_text_field((string) $_POST['geo_mode']) : 'auto',
+        'remote_geo' => !empty($_POST['remote_geo']) ? 1 : 0,
+        'remote_geo_vendor' => isset($_POST['remote_geo_vendor']) ? sanitize_text_field((string) $_POST['remote_geo_vendor']) : 'ipapi_co',
+        'maxmind_mmdb_path' => isset($_POST['maxmind_mmdb_path']) ? sanitize_text_field((string) $_POST['maxmind_mmdb_path']) : '',
       ];
 
-      if (!in_array($new['ip_source'], ['auto', 'remote_addr', 'cf', 'xff'], true)) $new['ip_source'] = 'auto';
+      if (!in_array($new['ip_source'], ['auto', 'remote_addr', 'cf', 'xff'], true))
+        $new['ip_source'] = 'auto';
       $new['retention_days'] = max(1, min(365, (int) $new['retention_days']));
 
-      if (!in_array($new['geo_mode'], ['auto', 'off', 'cf', 'maxmind', 'remote'], true)) $new['geo_mode'] = 'auto';
-      if (!in_array($new['remote_geo_vendor'], ['ipapi_co', 'ip_api_com'], true)) $new['remote_geo_vendor'] = 'ipapi_co';
+      if (!in_array($new['geo_mode'], ['auto', 'off', 'cf', 'maxmind', 'remote'], true))
+        $new['geo_mode'] = 'auto';
+      if (!in_array($new['remote_geo_vendor'], ['ipapi_co', 'ip_api_com'], true))
+        $new['remote_geo_vendor'] = 'ipapi_co';
 
       DIA_IPG_Core::set_cfg($new);
     }
 
-    if (($do === 'block' || $do === 'unblock') && filter_var($ip, FILTER_VALIDATE_IP)) {
-      $blocked = DIA_IPG_Core::blocked_list();
+if ($do === 'unblock_all') {
+  DIA_IPG_Core::set_blocked_list([]);
+}
 
-      if ($do === 'block') {
-        if (!in_array($ip, $blocked, true)) $blocked[] = $ip;
-      } else {
-        $blocked = array_values(array_filter($blocked, fn($x) => $x !== $ip));
-      }
+if (($do === 'block' || $do === 'unblock') && filter_var($ip, FILTER_VALIDATE_IP)) {
 
-      DIA_IPG_Core::set_blocked_list($blocked);
-    }
+  $blocked = DIA_IPG_Core::blocked_list();
+
+  if ($do === 'block') {
+    if (!in_array($ip, $blocked, true))
+      $blocked[] = $ip;
+  } else {
+    $blocked = array_values(array_filter($blocked, fn($x) => $x !== $ip));
+  }
+
+  DIA_IPG_Core::set_blocked_list($blocked);
+}
 
     if ($do === 'cleanup_now') {
       DIA_IPG_Logger::cleanup_logs();
@@ -101,22 +119,24 @@ class DIA_IPG_Admin {
 
     wp_safe_redirect(admin_url('admin.php?' . http_build_query([
       'page' => 'dia-ip-guardian',
-      'tab'  => $return_tab,
+      'tab' => $return_tab,
     ])));
     exit;
   }
 
-  public static function render() {
-    if (!current_user_can('manage_options')) return;
+  public static function render()
+  {
+    if (!current_user_can('manage_options'))
+      return;
 
-    $tab     = self::current_tab();
-    $cfg     = DIA_IPG_Core::cfg();
+    $tab = self::current_tab();
+    $cfg = DIA_IPG_Core::cfg();
     $blocked = DIA_IPG_Core::blocked_list();
 
     $nonce = wp_create_nonce('dia_ipg_nonce');
     ?>
     <div class="wrap">
-      <h1>IP Guardian</h1>
+      <h1>Zaygl IP blocker and anti-DDoS</h1>
 
       <?php self::render_tabs($tab); ?>
 
@@ -141,22 +161,23 @@ class DIA_IPG_Admin {
     <?php
   }
 
-  private static function render_tabs(string $active_tab): void {
+  private static function render_tabs(string $active_tab): void
+  {
     // ✅ Added notes before blocked
     $tabs = [
       'overview' => 'Overview',
-      'recent'   => 'Visitor activity',
-      'notes'    => 'Notes',
-      'blocked'  => 'Blocked',
+      'recent' => 'Visitor activity',
+      'notes' => 'Notes',
+      'blocked' => 'Blocked',
       'settings' => 'Settings',
-      'info'     => 'Info',
+      'info' => 'Info',
     ];
 
     echo '<nav class="nav-tab-wrapper" style="margin-top: 10px;">';
     foreach ($tabs as $key => $label) {
       $url = admin_url('admin.php?' . http_build_query([
         'page' => 'dia-ip-guardian',
-        'tab'  => $key,
+        'tab' => $key,
       ]));
       $class = 'nav-tab' . ($active_tab === $key ? ' nav-tab-active' : '');
       echo '<a class="' . esc_attr($class) . '" href="' . esc_url($url) . '">' . esc_html($label) . '</a>';
@@ -166,194 +187,261 @@ class DIA_IPG_Admin {
 
   /* -------------------- TAB: OVERVIEW -------------------- */
 
-  private static function render_tab_overview(array $blocked): void {
-    ?>
-    <p style="max-width: 800px;">
-      Overview of top visitor IPs. Use sorting, pagination, and rows-per-page without reloading the whole plugin page.
-    </p>
-
-    <hr />
-
-    <div style="max-width: 900px; margin-top: 6px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px;max-width:900px;">
-        <div style="display:flex;align-items:center;gap:12px;">
-          <label for="ipg_top_range"><strong>Top IPs:</strong></label>
-
-          <select id="ipg_top_range">
-            <option value="top24" selected>last 24 hours</option>
-            <option value="top3d">last 3 days</option>
-            <option value="top7d">last 7 days</option>
-          </select>
-
-          <span id="ipg-top-loading" style="display:none;margin-left:10px;font-size:12px;opacity:.85;">
-            Loading… this may take a few moments
-          </span>
-        </div>
-
-        <!-- ✅ Search on the same row, aligned right -->
-        <input
-          type="search"
-          class="ipg-ip-search"
-          data-table="top24"
-          placeholder="search IP"
-          style="width:240px;max-width:40vw;"
-        />
-      </div>
-
-      <style>
-        @keyframes ipgBlink { 0%,100% { opacity: .2; } 50% { opacity: 1; } }
-        #ipg-top-loading.ipg-blink { animation: ipgBlink 0.9s infinite; }
-      </style>
-
-      <div id="ipg-top-container" data-country="">
-        <?php
-        $page     = 1;
-        $per_page = 50;
-        $orderby  = 'hits';
-        $order    = 'DESC';
-
-        // ✅ initial dropdown countries
-        $country   = '';
-        $countries = DIA_IPG_Logger::top_countries(24);
-
-        $data = DIA_IPG_Logger::top_ips_paged(24, $page, $per_page, $orderby, $order, $country);
-
-        DIA_IPG_Table::render_top_ips_table([
-          'table_key'  => 'top24',
-          'title'      => 'Top IPs — last 24 hours',
-          'rows'       => $data['rows'],
-          'total'      => $data['total'],
-          'page'       => $page,
-          'per_page'   => $per_page,
-          'orderby'    => $orderby,
-          'order'      => $order,
-          'blocked'    => $blocked,
-          'countries'  => $countries,
-          'country'    => $country,
-        ]);
-        ?>
-      </div>
-    </div>
-    <?php
-  }
-
-  /* -------------------- TAB: RECENT -------------------- */
-
-  private static function render_tab_recent(array $blocked): void {
-    $recent_hours  = isset($_GET['recent_hours']) ? (int) $_GET['recent_hours'] : 24;
-    $allowed_hours = [1, 6, 24, 168, 720, 0];
-    if (!in_array($recent_hours, $allowed_hours, true)) $recent_hours = 24;
-    ?>
-    <p style="max-width: 900px;">
-      Recent visitor activity shows exact URLs + browser (user agent). You can sort by time and paginate without reloading
-      the whole plugin page.
-    </p>
-
-    <hr />
-
-    <form method="get" style="margin: 10px 0 14px;">
-      <input type="hidden" name="page" value="dia-ip-guardian" />
-      <input type="hidden" name="tab" value="recent" />
-
-      <label for="recent_hours" style="margin-right:8px;"><strong>Show:</strong></label>
-      <select name="recent_hours" id="recent_hours" onchange="this.form.submit()">
-        <option value="1"   <?php selected($recent_hours, 1); ?>>Last 1 hour</option>
-        <option value="6"   <?php selected($recent_hours, 6); ?>>Last 6 hours</option>
-        <option value="24"  <?php selected($recent_hours, 24); ?>>Last 24 hours</option>
-        <option value="168" <?php selected($recent_hours, 168); ?>>Last 7 days</option>
-        <option value="720" <?php selected($recent_hours, 720); ?>>Last 30 days</option>
-        <option value="0"   <?php selected($recent_hours, 0); ?>>All time</option>
-      </select>
-
-      <noscript><?php submit_button('Filter', 'secondary', '', false); ?></noscript>
-    </form>
-
-    <?php
-    $page     = 1;
-    $per_page = 50;
-    $order    = 'DESC';
-
-    $data = DIA_IPG_Logger::recent_visits_paged($page, $per_page, $recent_hours, $order);
-
-    DIA_IPG_Table::render_recent_table([
-      'title'        => 'Recent visitor activity — full URLs & browser info',
-      'rows'         => $data['rows'],
-      'total'        => $data['total'],
-      'page'         => $page,
-      'per_page'     => $per_page,
-      'order'        => $order,
-      'recent_hours' => $recent_hours,
-      'blocked'      => $blocked,
-    ]);
-  }
-
-  /* -------------------- TAB: NOTES -------------------- */
-
-private static function render_tab_notes(): void {
+private static function render_tab_overview(array $blocked): void
+{
   ?>
-  <p style="max-width: 900px;">
-    Add quick notes for IPs (example: “Googlebot”, “Payment webhook”, “Suspicious scraper”). Notes are stored locally.
+  <p style="max-width: 800px;">
+    Overview of top visitor IPs. Use sorting, pagination, and rows-per-page without reloading the whole plugin page.
   </p>
 
   <hr />
 
-  <div style="max-width: 980px;">
-    <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
-      <div>
-        <label for="ipg-note-ip"><strong>IP</strong></label><br />
-        <input id="ipg-note-ip" type="text" placeholder="e.g. 8.8.8.8" style="width:220px;" />
+  <div style="max-width: 900px; margin-top: 6px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:10px;max-width:900px;flex-wrap:wrap;">
+
+      <!-- Left: range -->
+      <div style="display:flex;align-items:center;gap:12px;min-width:220px;">
+        <label for="ipg_top_range"><strong>Top IPs:</strong></label>
+
+        <select id="ipg_top_range">
+          <option value="top5m">last 5 minutes</option>
+          <option value="top1h">last 1 hour</option>
+          <option value="top24" selected>last 24 hours</option>
+          <option value="top3d">last 3 days</option>
+          <option value="top7d">last 7 days</option>
+        </select>
+
+        <span id="ipg-top-loading" style="display:none;margin-left:10px;font-size:12px;opacity:.85;">
+          loading… 
+        </span>
       </div>
 
-      <div style="flex:1;min-width:260px;">
-        <label for="ipg-note-comment"><strong>Comment</strong></label><br />
-        <input id="ipg-note-comment" type="text" placeholder="Write a short note…" style="width:100%;" />
+      <!-- Center: search -->
+      <div style="flex:1;display:flex;justify-content:center;min-width:220px;">
+        <input
+          type="search"
+          class="ipg-ip-search"
+          placeholder="search IP"
+          style="width:260px;max-width:100%;"
+        />
       </div>
 
-      <div style="display:flex;gap:8px;">
-        <button type="button" class="button button-primary ipg-note-save">Save</button>
-        <button type="button" class="button ipg-note-cancel" style="display:none;">Cancel</button>
+      <!-- Right: bulk actions -->
+      <div style="display:flex;align-items:center;gap:8px;justify-content:flex-end;min-width:260px;">
+        <select id="ipg-bulk-action">
+          <option value="">bulk actions</option>
+          <option value="block_selected">block selected</option>
+          <option value="unblock_selected">unblock selected</option>
+          <option value="unblock_all">unblock all blocked IPs</option>
+        </select>
+
+        <button type="button" class="button" id="ipg-bulk-apply">submit</button>
       </div>
     </div>
 
-    <!-- JS will load & refresh this table via AJAX -->
-    <div id="ipg-notes-wrap" class="ipg-notes-container">
-      <p style="opacity:.75;">Loading notes…</p>
-      <noscript>
-        <p>This tab requires JavaScript for inline save/edit. (We’ll add a non-JS fallback later if you want.)</p>
-      </noscript>
-    </div>
+    <style>
+      @keyframes ipgBlink {
+        0%, 100% { opacity: .2; }
+        50% { opacity: 1; }
+      }
+
+      #ipg-top-loading.ipg-blink {
+        animation: ipgBlink 0.9s infinite;
+      }
+    </style>
+
+    <!-- JS fills this via AJAX -->
+    <div id="ipg-top-container" data-country="" data-ip-search=""></div>
   </div>
   <?php
 }
 
-  /* -------------------- TAB: BLOCKED -------------------- */
+  /* -------------------- TAB: RECENT -------------------- */
 
-  private static function render_tab_blocked(array $blocked): void {
+private static function render_tab_recent(array $blocked): void
+{
+  $recent_range = isset($_GET['recent_hours']) ? (int) $_GET['recent_hours'] : 24;
+
+  // allowed values: 5 minutes OR hours OR all time
+  $allowed_ranges = [5, 1, 6, 24, 168, 720, 0];
+  if (!in_array($recent_range, $allowed_ranges, true)) {
+    $recent_range = 24;
+  }
+  ?>
+  <p style="max-width: 900px;">
+    Recent visitor activity shows exact URLs + browser (user agent). You can sort by time and paginate without reloading
+    the whole plugin page.
+  </p>
+
+  <hr />
+
+  <form method="get" style="margin: 10px 0 14px;">
+    <input type="hidden" name="page" value="dia-ip-guardian" />
+    <input type="hidden" name="tab" value="recent" />
+
+    <label for="recent_hours" style="margin-right:8px;"><strong>Show:</strong></label>
+    <select name="recent_hours" id="recent_hours" onchange="this.form.submit()">
+      <option value="5" <?php selected($recent_range, 5); ?>>Last 5 minutes</option>
+      <option value="1" <?php selected($recent_range, 1); ?>>Last 1 hour</option>
+      <option value="6" <?php selected($recent_range, 6); ?>>Last 6 hours</option>
+      <option value="24" <?php selected($recent_range, 24); ?>>Last 24 hours</option>
+      <option value="168" <?php selected($recent_range, 168); ?>>Last 7 days</option>
+      <option value="720" <?php selected($recent_range, 720); ?>>Last 30 days</option>
+      <option value="0" <?php selected($recent_range, 0); ?>>All time</option>
+    </select>
+
+    <noscript><?php submit_button('Filter', 'secondary', '', false); ?></noscript>
+  </form>
+
+  <?php
+  $page = 1;
+  $per_page = 50;
+  $order = 'DESC';
+
+  // ✅ Use minutes method only for 5m, otherwise hours method
+  if ($recent_range === 5) {
+    $data = DIA_IPG_Logger::recent_visits_paged_minutes($page, $per_page, 5, $order);
+  } else {
+    $data = DIA_IPG_Logger::recent_visits_paged($page, $per_page, $recent_range, $order);
+  }
+
+  DIA_IPG_Table::render_recent_table([
+    'title'        => 'Recent visitor activity — full URLs & browser info',
+    'rows'         => $data['rows'],
+    'total'        => $data['total'],
+    'page'         => $page,
+    'per_page'     => $per_page,
+    'order'        => $order,
+    // keep the param name "recent_hours" if your table renderer expects it
+    // (it can now be 5 too, meaning 5 minutes)
+    'recent_hours' => $recent_range,
+    'blocked'      => $blocked,
+  ]);
+}
+
+  /* -------------------- TAB: NOTES -------------------- */
+
+  private static function render_tab_notes(): void
+  {
+    // Fetch saved notes (array of 30 rows). We'll store it in an option.
+    $notes = get_option('dia_ipg_notes_rows', []);
+    if (!is_array($notes))
+      $notes = [];
+
+    // Ensure exactly 30 rows exist
+    for ($i = 0; $i < 30; $i++) {
+      if (!isset($notes[$i]) || !is_array($notes[$i])) {
+        $notes[$i] = ['ip' => '', 'comment' => ''];
+      } else {
+        $notes[$i]['ip'] = isset($notes[$i]['ip']) ? (string) $notes[$i]['ip'] : '';
+        $notes[$i]['comment'] = isset($notes[$i]['comment']) ? (string) $notes[$i]['comment'] : '';
+      }
+    }
+
+    // Prefill first 3 comments if empty (no “official IP” exists as single value)
+    if (trim($notes[0]['comment']) === '')
+      $notes[0]['comment'] = 'Googlebot';
+    if (trim($notes[1]['comment']) === '')
+      $notes[1]['comment'] = 'Bingbot';
+    if (trim($notes[2]['comment']) === '')
+      $notes[2]['comment'] = 'Heavy bot (high hits / suspicious)';
+
+    update_option('dia_ipg_notes_rows', $notes, false);
     ?>
-    <p>All IPs you blocked using the plugin.</p>
+    <p style="max-width: 900px;">
+      Store quick notes for IPs (example: “Googlebot”, “Payment webhook”, “Suspicious scraper”). Notes are stored locally.
+    </p>
+
     <hr />
-    <?php if (empty($blocked)): ?>
-      <p>No blocked IPs yet.</p>
-    <?php else: ?>
-      <ul style="margin-top: 10px;">
-        <?php foreach ($blocked as $ip): ?>
-          <li style="margin: 6px 0;">
-            <code><?php echo esc_html($ip); ?></code>
-            <a class="button" style="margin-left:10px;"
-              href="<?php echo esc_url(self::action_url('unblock', (string) $ip, 'blocked')); ?>">
-              Unblock
-            </a>
-          </li>
-        <?php endforeach; ?>
-      </ul>
-    <?php endif; ?>
+
+    <div style="max-width: 980px;">
+      <table class="widefat striped" style="max-width:980px;">
+        <thead>
+          <tr>
+            <th style="width:220px;">IP</th>
+            <th>Comment</th>
+            <th style="width:160px;text-align: right;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <?php for ($i = 0; $i < 30; $i++): ?>
+            <tr data-note-row="<?php echo esc_attr((string) $i); ?>">
+              <td>
+                <input type="text" class="ipg-note-ip" value="<?php echo esc_attr($notes[$i]['ip']); ?>"
+                  placeholder="8.8.8.8" style="width:100%;" />
+              </td>
+              <td>
+                <input type="text" class="ipg-note-comment" value="<?php echo esc_attr($notes[$i]['comment']); ?>"
+                  placeholder="write a short note…" style="width:100%;" />
+              </td>
+              <td>
+                <div style="display:flex;gap:8px;justify-content:flex-end;">
+                  <button type="button" class="button button-primary ipg-note-save">save</button>
+                  <button type="button" class="button ipg-note-delete">delete</button>
+                </div>
+                <div class="ipg-note-msg" style="display:none;margin-top:6px;font-size:12px;opacity:.75;"></div>
+              </td>
+            </tr>
+          <?php endfor; ?>
+        </tbody>
+      </table>
+    </div>
     <?php
   }
+  /* -------------------- TAB: BLOCKED -------------------- */
+
+private static function render_tab_blocked(array $blocked): void
+{
+?>
+  <p>All IPs you blocked using the plugin.</p>
+  <hr />
+<div style="margin-bottom:12px;">
+  <a class="button button-secondary"
+     href="<?php echo esc_url(self::action_url('unblock_all', '', 'blocked')); ?>"
+     onclick="return confirm('Unblock ALL blocked IPs?');">
+     unblock all
+  </a>
+</div>
+  <div style="max-width: 900px;">
+    <table class="widefat striped">
+      <thead>
+        <tr>
+          <th style="width:70px;">#</th>
+          <th>IP</th>
+          <th style="width:140px;">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        <?php if (empty($blocked)): ?>
+          <tr>
+            <td colspan="3">No blocked IPs yet.</td>
+          </tr>
+        <?php else: ?>
+          <?php foreach (array_values($blocked) as $i => $ip): ?>
+            <tr>
+              <td><?php echo esc_html((string) ($i + 1)); ?></td>
+              <td><code><?php echo esc_html($ip); ?></code></td>
+              <td>
+                <a class="button"
+                  href="<?php echo esc_url(self::action_url('unblock', (string) $ip, 'blocked')); ?>">
+                  unblock
+                </a>
+              </td>
+            </tr>
+          <?php endforeach; ?>
+        <?php endif; ?>
+      </tbody>
+    </table>
+  </div>
+<?php
+}
 
   /* -------------------- TAB: SETTINGS -------------------- */
 
-  public static function clear_logs() {
-    if (!current_user_can('manage_options')) wp_die('Forbidden');
+  public static function clear_logs()
+  {
+    if (!current_user_can('manage_options'))
+      wp_die('Forbidden');
     check_admin_referer('dia_ipg_clear_logs');
 
     global $wpdb;
@@ -364,8 +452,10 @@ private static function render_tab_notes(): void {
     exit;
   }
 
-  public static function reset_settings() {
-    if (!current_user_can('manage_options')) wp_die('Forbidden');
+  public static function reset_settings()
+  {
+    if (!current_user_can('manage_options'))
+      wp_die('Forbidden');
     check_admin_referer('dia_ipg_reset_settings');
 
     // ⚠️ Keep your real option keys here (replace these if needed)
@@ -377,11 +467,13 @@ private static function render_tab_notes(): void {
     exit;
   }
 
-  private static function render_tab_settings(array $cfg, string $nonce): void {
+  private static function render_tab_settings(array $cfg, string $nonce): void
+  {
     ?>
     <div style="max-width: 900px;">
       <p>
-        Here you can control how IP Guardian detects visitor IPs, how long logs are stored, and how country flags are detected.
+        Here you can control how Zaygl IP blocker and anti-DDoS detects visitor IPs, how long logs are stored, and how country flags are
+        detected.
         If you’re not sure, the “Auto” options are safe defaults.
       </p>
 
@@ -396,22 +488,28 @@ private static function render_tab_notes(): void {
             <th scope="row">IP Source</th>
             <td>
               <select name="ip_source">
-                <option value="auto"        <?php selected($cfg['ip_source'], 'auto'); ?>>Auto (CF → XFF → REMOTE_ADDR)</option>
-                <option value="cf"          <?php selected($cfg['ip_source'], 'cf'); ?>>Cloudflare (HTTP_CF_CONNECTING_IP)</option>
-                <option value="xff"         <?php selected($cfg['ip_source'], 'xff'); ?>>Proxy (X-Forwarded-For)</option>
-                <option value="remote_addr" <?php selected($cfg['ip_source'], 'remote_addr'); ?>>Direct (REMOTE_ADDR)</option>
+                <option value="auto" <?php selected($cfg['ip_source'], 'auto'); ?>>Auto (CF → XFF → REMOTE_ADDR)</option>
+                <option value="cf" <?php selected($cfg['ip_source'], 'cf'); ?>>Cloudflare (HTTP_CF_CONNECTING_IP)</option>
+                <option value="xff" <?php selected($cfg['ip_source'], 'xff'); ?>>Proxy (X-Forwarded-For)</option>
+                <option value="remote_addr" <?php selected($cfg['ip_source'], 'remote_addr'); ?>>Direct (REMOTE_ADDR)
+                </option>
               </select>
 
               <p class="description" style="margin-top:6px;">
                 This controls where the plugin gets the visitor IP from.
-                If your site is behind Cloudflare or a proxy, picking the wrong source can show the proxy IP instead of the real visitor.
+                If your site is behind Cloudflare or a proxy, picking the wrong source can show the proxy IP instead of the
+                real visitor.
               </p>
 
               <ul style="margin:8px 0 0 18px; list-style:disc;">
-                <li><strong>Auto:</strong> Best choice for most sites. Tries Cloudflare first, then proxy headers, then direct.</li>
-                <li><strong>Cloudflare:</strong> Use this if your site is on Cloudflare and you want the most accurate real visitor IP.</li>
-                <li><strong>Proxy (X-Forwarded-For):</strong> Use only if you’re behind a trusted proxy/load balancer that sets XFF correctly.</li>
-                <li><strong>Direct (REMOTE_ADDR):</strong> Use if you are not behind Cloudflare/proxies. (Otherwise you may log the proxy IP.)</li>
+                <li><strong>Auto:</strong> Best choice for most sites. Tries Cloudflare first, then proxy headers, then
+                  direct.</li>
+                <li><strong>Cloudflare:</strong> Use this if your site is on Cloudflare and you want the most accurate real
+                  visitor IP.</li>
+                <li><strong>Proxy (X-Forwarded-For):</strong> Use only if you’re behind a trusted proxy/load balancer that
+                  sets XFF correctly.</li>
+                <li><strong>Direct (REMOTE_ADDR):</strong> Use if you are not behind Cloudflare/proxies. (Otherwise you may
+                  log the proxy IP.)</li>
               </ul>
             </td>
           </tr>
@@ -438,7 +536,8 @@ private static function render_tab_notes(): void {
               </label>
 
               <p class="description" style="margin-top:6px;">
-                <strong>Enabled:</strong> visits made by Administrator users won’t be logged. Useful to avoid polluting logs with your own activity.
+                <strong>Enabled:</strong> visits made by Administrator users won’t be logged. Useful to avoid polluting logs
+                with your own activity.
               </p>
             </td>
           </tr>
@@ -459,17 +558,21 @@ private static function render_tab_notes(): void {
             </td>
           </tr>
 
-          <tr><th colspan="2"><hr /></th></tr>
+          <tr>
+            <th colspan="2">
+              <hr />
+            </th>
+          </tr>
 
           <tr>
             <th scope="row">Geo detection</th>
             <td>
               <select name="geo_mode">
-                <option value="auto"    <?php selected($cfg['geo_mode'], 'auto'); ?>>Auto (CF → MaxMind → Remote)</option>
-                <option value="off"     <?php selected($cfg['geo_mode'], 'off'); ?>>Off</option>
-                <option value="cf"      <?php selected($cfg['geo_mode'], 'cf'); ?>>Cloudflare header only</option>
+                <option value="auto" <?php selected($cfg['geo_mode'], 'auto'); ?>>Auto (CF → MaxMind → Remote)</option>
+                <option value="off" <?php selected($cfg['geo_mode'], 'off'); ?>>Off</option>
+                <option value="cf" <?php selected($cfg['geo_mode'], 'cf'); ?>>Cloudflare header only</option>
                 <option value="maxmind" <?php selected($cfg['geo_mode'], 'maxmind'); ?>>MaxMind (mmdb + library)</option>
-                <option value="remote"  <?php selected($cfg['geo_mode'], 'remote'); ?>>Remote API (admin only)</option>
+                <option value="remote" <?php selected($cfg['geo_mode'], 'remote'); ?>>Remote API (admin only)</option>
               </select>
 
               <p class="description" style="margin-top:6px;">
@@ -485,8 +588,8 @@ private static function render_tab_notes(): void {
               <label style="display:block;margin-top:10px;">
                 Remote vendor:
                 <select name="remote_geo_vendor">
-                  <option value="ipapi_co"  <?php selected($cfg['remote_geo_vendor'], 'ipapi_co'); ?>>ipapi.co</option>
-                  <option value="ip_api_com"<?php selected($cfg['remote_geo_vendor'], 'ip_api_com'); ?>>ip-api.com</option>
+                  <option value="ipapi_co" <?php selected($cfg['remote_geo_vendor'], 'ipapi_co'); ?>>ipapi.co</option>
+                  <option value="ip_api_com" <?php selected($cfg['remote_geo_vendor'], 'ip_api_com'); ?>>ip-api.com</option>
                 </select>
               </label>
 
@@ -508,17 +611,13 @@ private static function render_tab_notes(): void {
       </form>
 
       <div style="display:flex; justify-content:flex-end; gap:10px; margin-top:15px;">
-        <a
-          href="<?php echo esc_url(admin_url('admin-post.php?action=dia_ipg_clear_logs&_wpnonce=' . wp_create_nonce('dia_ipg_clear_logs'))); ?>"
+        <a href="<?php echo esc_url(admin_url('admin-post.php?action=dia_ipg_clear_logs&_wpnonce=' . wp_create_nonce('dia_ipg_clear_logs'))); ?>"
           class="button button-secondary"
-          onclick="return confirm('This will permanently delete all log records. Continue?');"
-        >clear all logs</a>
+          onclick="return confirm('This will permanently delete all log records. Continue?');">clear all logs</a>
 
-        <a
-          href="<?php echo esc_url(admin_url('admin-post.php?action=dia_ipg_reset_settings&_wpnonce=' . wp_create_nonce('dia_ipg_reset_settings'))); ?>"
+        <a href="<?php echo esc_url(admin_url('admin-post.php?action=dia_ipg_reset_settings&_wpnonce=' . wp_create_nonce('dia_ipg_reset_settings'))); ?>"
           class="button button-link-delete"
-          onclick="return confirm('This will reset all DIA IP Guardian settings to default. Continue?');"
-        >reset settings</a>
+          onclick="return confirm('This will reset all Zaygl IP blocker and anti-DDoS settings to default. Continue?');">reset settings</a>
       </div>
     </div>
     <?php
@@ -526,7 +625,8 @@ private static function render_tab_notes(): void {
 
   /* -------------------- TAB: INFO -------------------- */
 
-  private static function render_tab_info(): void {
+  private static function render_tab_info(): void
+  {
     ?>
     <h2>What this plugin does</h2>
     <p>This plugin helps you see who is visiting your website and gives you simple tools to protect it.</p>
@@ -559,9 +659,11 @@ private static function render_tab_notes(): void {
 
     <h2>Note</h2>
 
-    <div style="margin-top:10px;max-width:900px;border:1px solid #e2e4e7;background:#f6f7f7;padding:14px 16px;border-radius:4px;">
+    <div
+      style="margin-top:10px;max-width:900px;border:1px solid #e2e4e7;background:#f6f7f7;padding:14px 16px;border-radius:4px;">
       <p style="margin-top:0;">
-        These numbers help you understand the nature of your traffic and identify whether activity is normal or potentially suspicious.
+        These numbers help you understand the nature of your traffic and identify whether activity is normal or potentially
+        suspicious.
       </p>
 
       <table class="widefat striped" style="margin-top:10px;max-width:600px;">
@@ -572,16 +674,32 @@ private static function render_tab_notes(): void {
           </tr>
         </thead>
         <tbody>
-          <tr><td>1–50</td><td>Normal visitor activity</td></tr>
-          <tr><td>50–150</td><td>Probably a crawler or heavy user</td></tr>
-          <tr><td>150–500</td><td>Worth investigating</td></tr>
-          <tr><td>500–1000+</td><td>Likely automated bot</td></tr>
-          <tr><td>2000+</td><td><strong>Very suspicious — possible attack</strong></td></tr>
+          <tr>
+            <td>1–50</td>
+            <td>Normal visitor activity</td>
+          </tr>
+          <tr>
+            <td>50–150</td>
+            <td>Probably a crawler or heavy user</td>
+          </tr>
+          <tr>
+            <td>150–500</td>
+            <td>Worth investigating</td>
+          </tr>
+          <tr>
+            <td>500–1000+</td>
+            <td>Likely automated bot</td>
+          </tr>
+          <tr>
+            <td>2000+</td>
+            <td><strong>Very suspicious — possible attack</strong></td>
+          </tr>
         </tbody>
       </table>
 
       <p style="margin-top:12px;opacity:.85;">
-        Keep in mind that search engine bots (Google, Bing, etc.) may generate high traffic and are not always malicious.<br>
+        Keep in mind that search engine bots (Google, Bing, etc.) may generate high traffic and are not always
+        malicious.<br>
         Always review the IP, URL patterns, and user agent before blocking.
       </p>
     </div>

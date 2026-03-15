@@ -1,6 +1,6 @@
 <?php
 /**
- * Plugin Name: IP Guardian
+ * Plugin Name: Zaygl IP blocker and anti-DDoS
  * Description: Logs visitor IPs and shows top IPs (24h / 7d) with easy block/unblock.
  * Version: 1.0.0
  * Author: Diana Hakobyan
